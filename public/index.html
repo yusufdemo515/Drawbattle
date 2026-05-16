@@ -55,6 +55,7 @@
 
 <section id="avatar" class="screen" style="display:none">
  <div class="card">
+  <button class="back-btn" onclick="goBack()">← Back</button>
   <span class="pill">Step 1 / 2</span>
   <h2>Choose username & avatar</h2>
   <p><b>Enter your name and pick your avatar before joining a room.</b></p>
@@ -65,6 +66,7 @@
 </section>
 
 <section id="rooms" class="screen" style="display:none">
+ <button class="back-btn floating-back" onclick="goBack()">← Back</button>
  <div class="grid2">
   <div class="card">
     <h2>Play DrawBattle</h2>
@@ -78,6 +80,7 @@
 
 <section id="create" class="screen" style="display:none">
  <div class="card">
+  <button class="back-btn" onclick="goBack()">← Back</button>
   <h2>Create Room</h2>
   <div class="grid2">
    <div class="field"><label>Room Name</label><input id="roomName" value="" placeholder="Auto: your Drawing Room" onblur="validateRoomName(false)"/></div>
@@ -92,6 +95,7 @@
 </section>
 
 <section id="lobby" class="screen" style="display:none">
+ <button class="back-btn floating-back" onclick="goBack()">← Back</button>
  <div class="lobby-layout">
   <div class="card"><h2>Players <span id="playerCount" class="pill">0/10</span></h2><div id="playerList"></div></div>
   <div class="card">
@@ -121,6 +125,7 @@
 </section>
 
 <section id="intro" class="screen" style="display:none">
+ <button class="back-btn floating-back" onclick="goBack()">← Back</button>
  <div class="card intro-card">
   <div class="intro-inner">
    <span class="pill">Round <span id="introRound">1/8</span></span>
@@ -136,6 +141,7 @@
 </section>
 
 <section id="draw" class="screen" style="display:none">
+ <button class="back-btn floating-back" onclick="goBack()">← Back</button>
  <div class="draw-layout">
   <div class="card notebook-chat"><h2 class="chat-title">💬 CHAT</h2><div id="sketchChat" class="chat-body side-chat"></div><div class="chat-input-row side-chat-input"><input id="drawMsg" placeholder="Type..." onkeydown="if(event.key==='Enter')sendChat('drawMsg')"/><button onclick="sendChat('drawMsg')">➤</button></div></div>
   <div class="card">
@@ -171,6 +177,7 @@
 </section>
 
 <section id="vote" class="screen" style="display:none">
+ <button class="back-btn floating-back" onclick="goBack()">← Back</button>
  <div class="vote-layout">
   <div class="card notebook-chat"><h2 class="chat-title">💬 CHAT</h2><div id="voteChat" class="chat-body side-chat"></div><div class="chat-input-row side-chat-input"><input id="voteMsg" placeholder="Type..." onkeydown="if(event.key==='Enter')sendChat('voteMsg')"/><button onclick="sendChat('voteMsg')">➤</button></div></div>
   <div class="card">
@@ -187,6 +194,7 @@
 </section>
 
 <section id="results" class="screen" style="display:none">
+ <button class="back-btn floating-back" onclick="goBack()">← Back</button>
  <div class="card winner-card">
   <div id="confettiLayer"></div>
   <div class="center"><div class="winner-crown">👑</div><h2 class="winner-heading">🏆 Final Winner</h2><div id="winnerTitle" class="fun-title">Sketch King 👑</div><p><b>Final points after all rounds.</b></p></div>

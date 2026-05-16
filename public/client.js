@@ -6,6 +6,8 @@ const funTitles = ["Sketch King 👑","Chaos Artist 🎭","Potato Drawer 🥔","
 
 let sessionId = localStorage.getItem("drawbattleSessionId") || null;
 let currentRoomCode = localStorage.getItem("drawbattleRoomCode") || "";
+let screenHistory = ["home"];
+let currentScreen = "home";
 let selectedSeed = localStorage.getItem("drawbattleSeed") || "Aarav";
 let gameMode = "Hard";
 let roomState = null;
@@ -40,7 +42,7 @@ socket.on("publicRooms", renderPublicRooms);
 socket.on("joinedRoom", ({ code }) => {
   currentRoomCode = code;
   localStorage.setItem("drawbattleRoomCode", code);
-  go("lobby");
+  go("lobby", false);
 });
 socket.on("roomState", state => {
   roomState = state;
@@ -55,8 +57,13 @@ socket.on("kicked", () => { showToast("You were kicked by host."); currentRoomCo
 socket.on("stroke", ({ stroke }) => drawRemoteStroke(stroke));
 socket.on("reaction", ({ targetSessionId, reaction }) => showReaction(targetSessionId, reaction));
 
-function go(id) {
+function go(id, pushHistory = true) {
   if (id === "rooms" && !validateProfile()) return;
+  if (pushHistory && id !== currentScreen) {
+    screenHistory.push(currentScreen);
+    if (screenHistory.length > 25) screenHistory.shift();
+  }
+  currentScreen = id;
   document.querySelectorAll(".screen").forEach(s => { s.classList.remove("active"); s.style.display = "none"; });
   const target = document.getElementById(id);
   target.classList.add("active");
@@ -64,6 +71,23 @@ function go(id) {
   if (id === "draw") setupCanvas();
   scrollTo(0,0);
 }
+
+function goBack() {
+  let previous = screenHistory.pop() || "home";
+
+  // During active game, don't accidentally leave server room; just move UI back safely.
+  if (currentScreen === "draw" || currentScreen === "vote" || currentScreen === "intro" || currentScreen === "results") {
+    previous = "lobby";
+  }
+
+  if (currentScreen === "create") previous = "rooms";
+  if (currentScreen === "rooms") previous = "avatar";
+  if (currentScreen === "avatar") previous = "home";
+
+  go(previous, false);
+}
+
+window.addEventListener("popstate", () => goBack());
 
 function toggleSettings(){settingsPanel.classList.toggle("active");aboutPanel.classList.remove("active")}
 function toggleAbout(){aboutPanel.classList.toggle("active");settingsPanel.classList.remove("active")}
@@ -190,7 +214,7 @@ function renderPublicRooms(rooms){
 function joinPublic(code){ joinCode.value = code; joinRoomByCode(); }
 
 function renderLobby(){
- go("lobby");
+ go("lobby", false);
  lobbyName.textContent = roomState.name;
  roomPrivacy.innerHTML = roomState.type === "Private Room" ? "<b>Private code hidden. Copy invite code only.</b>" : "<b>Public room visible in room list.</b>";
  playerCount.textContent = `${roomState.players.length}/${roomState.settings.slots}`;
@@ -210,7 +234,7 @@ function kick(id){ socket.emit("kick", { code: currentRoomCode, targetSessionId:
 function reportPlayer(id){ socket.emit("report", { code: currentRoomCode, targetSessionId: id }); showToast("Report sent."); }
 
 function renderIntro(){
- go("intro");
+ go("intro", false);
  introRound.textContent = `${roomState.round}/${roomState.totalRounds}`;
  const msLeft = Math.max(0, roomState.timerEndsAt - Date.now());
  countdownNum.style.display = "block";
@@ -242,7 +266,7 @@ function renderIntro(){
 }
 
 function renderDraw(){
- go("draw");
+ go("draw", false);
  roundNow.textContent = roomState.round;
  drawRounds.textContent = roomState.totalRounds;
  promptBox.textContent = "✏️ " + roomState.currentPrompt.toUpperCase();
@@ -322,7 +346,7 @@ function floodFill(startX,startY,fill){
 }
 
 function renderVote(){
- go("vote");
+ go("vote", false);
  voteRound.textContent=roomState.round; voteRounds.textContent=roomState.totalRounds;
  startLocalTimer(voteTimer,()=>{});
  renderVoteCards();
@@ -352,12 +376,12 @@ function finishVotingHost(){ socket.emit("finishVoting", { code: currentRoomCode
 function renderRoundResults(){
  roundScore.style.display="block";
  roundScore.innerHTML=`Round ${roomState.round} points added. Next round starting...`;
- go("vote");
+ go("vote", false);
  renderVoteCards();
 }
 
 function renderResults(){
- go("results");
+ go("results", false);
  playSfx("win");
  const ranking=[...roomState.players].sort((a,b)=>b.score-a.score);
  winnerTitle.textContent=funTitles[Math.floor(Math.random()*funTitles.length)];
