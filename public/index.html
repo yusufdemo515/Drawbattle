@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>DrawBattle Multiplayer</title>
+<link rel="stylesheet" href="/style.css"/>
+</head>
+<body>
+<audio id="bgMusic" src="/assets/drawbattle.mp3" loop preload="auto"></audio>
+<div class="app">
+<header>
+  <div class="brand"><div class="logo">🎨</div><div><h1>DrawBattle</h1><div class="tagline">Multiplayer sketch battle</div></div></div>
+  <div class="header-actions"><button onclick="toggleSettings()">⚙ Settings</button><button onclick="toggleAbout()">ℹ About</button></div>
+</header>
+
+<div id="settingsPanel" class="settings-panel card">
+  <h2>Game Settings</h2>
+  <div class="field"><b>Music</b><button id="musicToggle" style="float:right" onclick="toggleMusic(this)">ON</button></div><br>
+  <div class="field"><b>SFX</b><button id="sfxToggle" style="float:right" onclick="toggleSfx(this)">ON</button></div><br>
+  <div class="field slider-field"><b>Music Volume</b><input type="range" min="0" max="100" value="70" oninput="musicVol=this.value/100;musicVolText.textContent=this.value+'%';bgMusic.volume=musicVol"><div class="small" id="musicVolText">70%</div></div><br>
+  <div class="field slider-field"><b>SFX Volume</b><input type="range" min="0" max="100" value="80" oninput="sfxVol=this.value/100;sfxVolText.textContent=this.value+'%';playSfx('click')"><div class="small" id="sfxVolText">80%</div></div><br>
+  <div class="field"><b>Theme</b><div class="theme-grid" style="margin-top:12px">
+    <button class="theme-option" onclick="setTheme('cozy')"><div class="theme-swatch" style="background:#fff7df"></div>Cozy</button>
+    <button class="theme-option" onclick="setTheme('sky')"><div class="theme-swatch" style="background:#eaf4ff"></div>Sky</button>
+    <button class="theme-option" onclick="setTheme('candy')"><div class="theme-swatch" style="background:#ffeef6"></div>Candy</button>
+    <button class="theme-option" onclick="setTheme('mint')"><div class="theme-swatch" style="background:#e9fff4"></div>Mint</button>
+    <button class="theme-option" onclick="setTheme('paper')"><div class="theme-swatch" style="background:#f8ead2"></div>Paper</button>
+    <button class="theme-option" onclick="setTheme('lavender')"><div class="theme-swatch" style="background:#f1edff"></div>Lavender</button>
+  </div></div>
+</div>
+
+<div id="aboutPanel" class="about-panel card">
+  <h2>About Developer</h2>
+  <div class="field" style="background:#fef3c7">
+    <b>DrawBattle</b>
+    <p>Cozy sketchbook-style multiplayer drawing battle.</p>
+    <p><b>Developer:</b> Yusuf</p>
+    <p><b>Studio:</b> BuddhuStudio</p>
+    <p><b>Version:</b> v1.0.0</p>
+    <p><b>Features:</b> rooms, realtime chat, realtime drawing, reconnect, voting, reactions, safety filters, winner effects.</p>
+  </div>
+</div>
+
+<section id="home" class="screen active home" style="display:block">
+ <div class="card">
+  <div class="logo big-logo">🎨</div><br>
+  <span class="pill">✨ Online Drawing Battle</span> <span class="safety-badge">🛡 Safe Chat</span>
+  <div class="credits-line">Dev: <b>Yusuf</b> • Studio: <b>BuddhuStudio</b> • Version: <b>v1.0.0</b></div>
+  <h2>DrawBattle</h2>
+  <p class="home-desc">Create a room, invite friends, draw random objects, vote secretly, and climb the scoreboard.</p>
+  <button onclick="go('avatar')" class="big-button">▶ Start Game</button>
+ </div>
+</section>
+
+<section id="avatar" class="screen" style="display:none">
+ <div class="card">
+  <span class="pill">Step 1 / 2</span>
+  <h2>Choose username & avatar</h2>
+  <p><b>Enter your name and pick your avatar before joining a room.</b></p>
+  <input id="username" value="" placeholder="Example: Yusuf"/>
+  <div id="avatarGrid" class="avatar-grid"></div>
+  <button onclick="validateProfileAndGoRooms()" class="full">Continue</button>
+ </div>
+</section>
+
+<section id="rooms" class="screen" style="display:none">
+ <div class="grid2">
+  <div class="card">
+    <h2>Play DrawBattle</h2>
+    <p><b>Create your own room or join an open room.</b></p>
+    <button onclick="go('create')" class="full">Create Room</button><br><br>
+    <div class="field"><b>Join by Room Code</b><br><br><input id="joinCode" placeholder="Enter private code e.g. DB-ABCD"/><br><br><button onclick="joinRoomByCode()">Join</button></div>
+  </div>
+  <div class="card"><h2>Public Rooms</h2><div id="publicRooms"></div></div>
+ </div>
+</section>
+
+<section id="create" class="screen" style="display:none">
+ <div class="card">
+  <h2>Create Room</h2>
+  <div class="grid2">
+   <div class="field"><label>Room Name</label><input id="roomName" value="" placeholder="Auto: your Drawing Room" onblur="validateRoomName(false)"/></div>
+   <div class="field"><label>Room Type</label><select id="roomType"><option>Private Room</option><option>Public Room</option></select></div>
+   <div class="field"><label>Player Slots</label><select id="slots"><option>10</option><option>8</option><option>6</option><option>4</option></select></div>
+   <div class="field"><label>Drawing Time</label><select id="timer"><option value="180">3 min</option><option value="360">6 min</option><option value="480">8 min</option></select></div>
+   <div class="field"><label>Rounds</label><select id="rounds"><option>8</option><option>4</option><option>6</option><option>10</option></select></div>
+   <div class="field"><label>Game Mode</label><div class="grid4"><button onclick="setMode('Normal')">Normal</button><button onclick="setMode('Medium')">Medium</button><button onclick="setMode('Hard')">Hard</button></div><div id="modePick" class="score-pop">Selected: Hard</div></div>
+  </div><br>
+  <button onclick="createRoom()" class="full big-button">Create Room & Open Lobby</button>
+ </div>
+</section>
+
+<section id="lobby" class="screen" style="display:none">
+ <div class="lobby-layout">
+  <div class="card"><h2>Players <span id="playerCount" class="pill">0/10</span></h2><div id="playerList"></div></div>
+  <div class="card">
+   <h2 id="lobbyName">Draw Room</h2>
+   <p id="roomPrivacy"><b>Private code hidden. Copy invite code only.</b></p>
+   <div class="afk-warning" id="reconnectBox">🔄 Reconnect ready: if net cuts, you can rejoin same room.</div>
+   <button onclick="copyInvite()">📋 Copy Invite Code</button>
+   <div class="grid4 stat-grid">
+     <div class="setting-box"><small>Players</small><b id="slotInfo">0/10</b></div>
+     <div class="setting-box"><small>Timer</small><b id="timerInfo">3 min</b></div>
+     <div class="setting-box"><small>Rounds</small><b id="roundInfo">8</b></div>
+     <div class="setting-box"><small>Mode</small><b id="modeInfo">Hard</b></div>
+   </div>
+   <div id="hostSettings" class="field host-only">
+    <label>Host can edit room settings here</label>
+    <div class="grid4">
+      <select id="lobbySlots" onchange="updateHostSettings()"><option>10</option><option>8</option><option>6</option><option>4</option></select>
+      <select id="lobbyTimer" onchange="updateHostSettings()"><option value="180">3 min</option><option value="360">6 min</option><option value="480">8 min</option></select>
+      <select id="lobbyRounds" onchange="updateHostSettings()"><option>8</option><option>4</option><option>6</option><option>10</option></select>
+      <select id="lobbyMode" onchange="updateHostSettings()"><option>Hard</option><option>Medium</option><option>Normal</option></select>
+    </div>
+   </div>
+   <br><button id="startGameBtn" onclick="startGame()" class="full big-button host-only">Host Start Game</button>
+  </div>
+  <div class="card chat"><h2>Chat</h2><div id="lobbyChat" class="chat-body"></div><div class="chat-input-row"><input id="lobbyMsg" placeholder="Type..." onkeydown="if(event.key==='Enter')sendChat('lobbyMsg')"/><button onclick="sendChat('lobbyMsg')">➤</button></div></div>
+ </div>
+</section>
+
+<section id="intro" class="screen" style="display:none">
+ <div class="card intro-card">
+  <div class="intro-inner">
+   <span class="pill">Round <span id="introRound">1/8</span></span>
+   <h2 id="introTitle" class="intro-title">Game starting in</h2>
+   <div id="countdownNum" class="countdown-number">5</div>
+   <div id="slotBox" class="slot-machine" style="display:none">
+    <div id="slotBlur" class="slot-blur">▓▓▓▓▓▓▓</div>
+    <div id="promptReveal" class="revealed-prompt" style="display:none">CYBER DRAGON</div>
+   </div>
+   <p><b id="introHint">Get ready...</b></p>
+  </div>
+ </div>
+</section>
+
+<section id="draw" class="screen" style="display:none">
+ <div class="draw-layout">
+  <div class="card notebook-chat"><h2 class="chat-title">💬 CHAT</h2><div id="sketchChat" class="chat-body side-chat"></div><div class="chat-input-row side-chat-input"><input id="drawMsg" placeholder="Type..." onkeydown="if(event.key==='Enter')sendChat('drawMsg')"/><button onclick="sendChat('drawMsg')">➤</button></div></div>
+  <div class="card">
+   <div id="afkBox" class="afk-warning">⚠ AFK check: if player does not draw/vote, auto skip will happen.</div>
+   <div class="top-row">
+     <div class="top-box"><small>Round</small><h2><span id="roundNow">1</span>/<span id="drawRounds">8</span></h2></div>
+     <div class="center"><div id="promptBox" class="prompt-box">✏️ CYBER DRAGON</div><p><b>Draw the object before time runs out</b></p></div>
+     <div class="top-box"><small>Time Left</small><h2 class="red" id="drawTimer">03:00</h2></div>
+   </div>
+   <div class="draw-main">
+    <div class="toolbox">
+     <b>🎨 Tools</b>
+     <label class="tool-label"><b>Brush Style</b></label>
+     <select id="toolSelect" class="tool-select selected" onchange="setTool(this.value)">
+       <option value="pencil">✏️ Pencil</option>
+       <option value="pen">🖊️ Pen</option>
+       <option value="sketch">🖍️ Sketch</option>
+       <option value="marker">🖌️ Marker</option>
+     </select>
+     <button id="eraserBtn" class="tool" onclick="setTool('eraser')">🧽 Eraser</button>
+     <button id="bucketBtn" class="tool" onclick="setTool('bucket')">🪣 Bucket Fill</button>
+     <label><b>Size</b></label><input id="brushSize" type="range" min="2" max="40" value="12"/>
+     <div class="colors" id="colors"></div>
+    </div>
+    <div>
+     <div class="canvas-wrap"><div class="canvas-top"><span></span><span></span><span></span><span></span><span></span></div><canvas id="drawCanvas" width="900" height="604"></canvas></div>
+     <div class="actions"><button onclick="undo()">↩ Undo</button><button onclick="redo()">↪ Redo</button><button onclick="clearCanvas()">🗑 Clear</button><button onclick="submitDrawing()">▶ Submit</button></div>
+     <div class="mobile-controls"><button onclick="setTool('pencil')">✏️ Pencil</button><button onclick="setTool('eraser')">🧽 Eraser</button><button onclick="undo()">↩ Undo</button><button onclick="submitDrawing()">▶ Submit</button></div>
+    </div>
+   </div>
+  </div>
+ </div>
+</section>
+
+<section id="vote" class="screen" style="display:none">
+ <div class="vote-layout">
+  <div class="card notebook-chat"><h2 class="chat-title">💬 CHAT</h2><div id="voteChat" class="chat-body side-chat"></div><div class="chat-input-row side-chat-input"><input id="voteMsg" placeholder="Type..." onkeydown="if(event.key==='Enter')sendChat('voteMsg')"/><button onclick="sendChat('voteMsg')">➤</button></div></div>
+  <div class="card">
+   <div class="top-row">
+     <div class="top-box"><small>Round</small><h2><span id="voteRound">1</span>/<span id="voteRounds">8</span></h2></div>
+     <div class="center"><div class="prompt-box">VOTING TIME</div><p><b>Vote secretly. Results show after voting.</b></p></div>
+     <div class="top-box"><small>Time Left</small><h2 class="red" id="voteTimer">00:40</h2></div>
+   </div>
+   <div id="roundScore" class="score-pop" style="display:none"></div>
+   <div class="vote-carousel"><button class="arrow" onclick="prevVote()">‹</button><div id="voteCards" class="vote-cards"></div><button class="arrow" onclick="nextVote()">›</button></div>
+   <div class="dots"><div id="voteDots"></div><br><b id="showingText"></b><br><br><button id="finishVoteBtn" onclick="finishVotingHost()">Finish Voting</button></div>
+  </div>
+ </div>
+</section>
+
+<section id="results" class="screen" style="display:none">
+ <div class="card winner-card">
+  <div id="confettiLayer"></div>
+  <div class="center"><div class="winner-crown">👑</div><h2 class="winner-heading">🏆 Final Winner</h2><div id="winnerTitle" class="fun-title">Sketch King 👑</div><p><b>Final points after all rounds.</b></p></div>
+  <div class="podium" id="podium"></div>
+  <div id="mvpCards" class="mvp-grid"></div>
+  <br><div id="finalList"></div><br>
+  <button onclick="go('lobby')" class="full">Play Again</button>
+ </div>
+</section>
+</div>
+
+<div id="toast" class="toast"></div>
+<div id="zoomModal" class="modal" onclick="closeZoom()">
+ <div class="modal-card" onclick="event.stopPropagation()">
+  <button class="close" onclick="closeZoom()">✕</button>
+  <h2 id="zoomTitle">Drawing Preview</h2>
+  <button class="download-btn" onclick="downloadZoomDrawing()">⬇ Download Drawing</button>
+  <div class="zoom-paper"><img id="zoomImg" alt="zoom drawing"/></div>
+ </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/client.js"></script>
+</body>
+</html>
