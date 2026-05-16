@@ -54,7 +54,16 @@ socket.on("chat", chat => renderChatList(chat));
 socket.on("notice", showToast);
 socket.on("errorMsg", msg => showToast("❌ " + msg));
 socket.on("kicked", () => { showToast("You were kicked by host."); currentRoomCode=""; go("rooms"); });
-socket.on("stroke", ({ stroke }) => drawRemoteStroke(stroke));
+
+socket.on("leftRoom", () => {
+  currentRoomCode = "";
+  localStorage.removeItem("drawbattleRoomCode");
+  roomState = null;
+  showToast("You left the room.");
+  go("rooms", false);
+});
+
+// Private canvas: no live remote drawing strokes are displayed.
 socket.on("reaction", ({ targetSessionId, reaction }) => showReaction(targetSessionId, reaction));
 
 function go(id, pushHistory = true) {
@@ -73,17 +82,24 @@ function go(id, pushHistory = true) {
 }
 
 function goBack() {
-  let previous = screenHistory.pop() || "home";
-
-  // During active game, don't accidentally leave server room; just move UI back safely.
-  if (currentScreen === "draw" || currentScreen === "vote" || currentScreen === "intro" || currentScreen === "results") {
-    previous = "lobby";
+  // If user is inside a room lobby and presses Back, officially leave room.
+  if (currentScreen === "lobby" && currentRoomCode) {
+    if (confirm("Leave this room?")) {
+      socket.emit("leaveRoom", { code: currentRoomCode });
+    }
+    return;
   }
 
+  // During an active game, don't accidentally leave. Go back to lobby view only.
+  if (currentScreen === "draw" || currentScreen === "vote" || currentScreen === "intro" || currentScreen === "results") {
+    go("lobby", false);
+    return;
+  }
+
+  let previous = screenHistory.pop() || "home";
   if (currentScreen === "create") previous = "rooms";
   if (currentScreen === "rooms") previous = "avatar";
   if (currentScreen === "avatar") previous = "home";
-
   go(previous, false);
 }
 
@@ -306,7 +322,8 @@ function setupCanvas(){
    ctx.beginPath(); ctx.moveTo(midPoint.x,midPoint.y); ctx.quadraticCurveTo(lastPoint.x,lastPoint.y,mid.x,mid.y); ctx.stroke();
    if(tool==="sketch"){ctx.globalAlpha=.16;ctx.beginPath();ctx.moveTo(midPoint.x+Math.random()*3,midPoint.y+Math.random()*3);ctx.quadraticCurveTo(lastPoint.x+Math.random()*5-2.5,lastPoint.y+Math.random()*5-2.5,mid.x,mid.y);ctx.stroke();}
    ctx.globalAlpha=1; midPoint=mid; lastPoint=p;
-   socket.emit("stroke", { code: currentRoomCode, stroke: { tool, color, size: Number(brushSize.value), from: midPoint, control: lastPoint, to: mid }});
+   // Private drawing: do not send live strokes to other players.
+   // Drawing image is sent only when Submit is clicked.
   };
   const stop=e=>{isDrawing=false;lastPoint=null;midPoint=null;try{canvas.releasePointerCapture&&canvas.releasePointerCapture(e.pointerId)}catch(_){}};
   canvas.onpointerup=stop; canvas.onpointercancel=stop; canvas.onpointerleave=stop;
@@ -317,14 +334,7 @@ function setupCanvas(){
   undoStack=[]; redoStack=[]; clearCanvas(false); saveState();
  }
 }
-function drawRemoteStroke(stroke){
- const ctx=drawCanvas.getContext("2d");
- ctx.globalCompositeOperation=stroke.tool==="eraser"?"destination-out":"source-over";
- ctx.strokeStyle=stroke.color; ctx.globalAlpha=stroke.tool==="marker"?.55:1;
- const base=Number(stroke.size||12);
- ctx.lineWidth=stroke.tool==="pen"?Math.max(2,base*.55):stroke.tool==="sketch"?base*1.15:stroke.tool==="marker"?base*1.65:base;
- ctx.beginPath(); ctx.moveTo(stroke.from.x,stroke.from.y); ctx.quadraticCurveTo(stroke.control.x,stroke.control.y,stroke.to.x,stroke.to.y); ctx.stroke(); ctx.globalAlpha=1;
-}
+function drawRemoteStroke(stroke){ /* private canvas mode: disabled */ }
 function pos(e){const r=drawCanvas.getBoundingClientRect();return{x:(e.clientX-r.left)*drawCanvas.width/r.width,y:(e.clientY-r.top)*drawCanvas.height/r.height}}
 function saveState(){try{undoStack.push(drawCanvas.toDataURL());if(undoStack.length>25)undoStack.shift()}catch(e){}}
 function restore(data){const img=new Image();img.onload=()=>{const ctx=drawCanvas.getContext("2d");ctx.clearRect(0,0,drawCanvas.width,drawCanvas.height);ctx.drawImage(img,0,0)};img.src=data}

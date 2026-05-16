@@ -49,3 +49,289 @@ input[type="range"]::-moz-range-thumb{width:28px;height:28px;border-radius:50%;b
 .floating-back{margin-bottom:18px}
 .back-btn:hover{transform:translateY(-2px) rotate(-1deg)}
 @media(max-width:900px){.back-btn{width:auto;padding:12px 18px}}
+
+.leave-btn{background:#fee2e2!important;color:#b91c1c!important}
+
+
+
+/* ===== Mobile UI Polish ===== */
+@media(max-width: 768px){
+  body::before{display:none}
+  .app{padding:12px;max-width:100%}
+  header{
+    align-items:flex-start;
+    gap:10px;
+    margin-bottom:14px;
+  }
+  .brand{gap:10px;min-width:0;width:100%}
+  .logo{width:48px;height:48px;font-size:26px;border-radius:16px;box-shadow:3px 3px 0 var(--ink);border-width:3px;flex:0 0 auto}
+  h1{font-size:34px;line-height:.92;word-break:break-word}
+  .tagline{font-size:12px}
+  .header-actions{
+    width:100%;
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:8px;
+  }
+  .header-actions button{width:100%;padding:11px 10px;border-radius:14px;font-size:14px}
+
+  .card{
+    padding:16px;
+    border-radius:20px;
+    box-shadow:5px 5px 0 var(--ink);
+    border-width:3px;
+  }
+  .home{min-height:72vh}
+  .big-logo{width:92px!important;height:92px!important;font-size:48px!important}
+  .home h2{font-size:48px;margin-top:14px}
+  .home-desc{font-size:15px;margin:14px auto}
+  .pill,.safety-badge,.credits-line{font-size:11px;padding:6px 10px;margin-top:6px}
+  .big-button,button{font-size:14px;padding:12px 14px;border-radius:14px;box-shadow:3px 3px 0 var(--ink)}
+  input,select{padding:12px;border-radius:14px;box-shadow:3px 3px 0 var(--ink);font-size:14px}
+
+  .grid2,.grid4,.lobby-layout,.draw-layout,.vote-layout,.top-row,.draw-main{
+    grid-template-columns:1fr!important;
+    gap:12px!important;
+  }
+
+  .avatar-grid{
+    grid-template-columns:repeat(4,1fr)!important;
+    gap:8px!important;
+    margin-top:14px;
+  }
+  .avatar-card{
+    padding:6px;
+    border-radius:14px;
+    min-width:0;
+  }
+  .avatar-img{
+    width:56px;
+    height:56px;
+  }
+  .small{
+    font-size:10px;
+    max-width:100%;
+  }
+
+  .room-row,.player-row{
+    padding:10px;
+    border-radius:15px;
+    gap:8px;
+    box-shadow:3px 3px 0 var(--ink);
+  }
+  .player-row img,.chat-avatar{
+    width:36px;
+    height:36px;
+    flex:0 0 auto;
+  }
+  .player-row button,.report-btn{
+    padding:7px 8px!important;
+    font-size:11px!important;
+    border-radius:11px;
+  }
+
+  .stat-grid{
+    grid-template-columns:repeat(2,1fr)!important;
+  }
+  .setting-box{
+    padding:10px;
+    border-radius:14px;
+  }
+  .setting-box b{font-size:14px}
+  .host-only .grid4,#hostSettings .grid4{
+    grid-template-columns:1fr 1fr!important;
+  }
+
+  .notebook-chat{
+    min-height:260px!important;
+    max-height:340px!important;
+    padding:14px;
+  }
+  .chat-title,.side-chat,.side-chat-input{
+    margin-left:10px!important;
+    width:calc(100% - 10px)!important;
+  }
+  .chat-body{
+    max-height:210px!important;
+    font-size:13px;
+  }
+  .chat-msg{
+    gap:8px;
+    margin:9px 0;
+  }
+  .chat-input-row{
+    gap:7px;
+  }
+  .chat-input-row button{
+    padding:10px 12px;
+    min-width:46px;
+  }
+
+  .top-row{
+    text-align:center;
+  }
+  .top-box{
+    padding:10px;
+    border-radius:16px;
+    box-shadow:3px 3px 0 var(--ink);
+  }
+  .top-box h2{
+    font-size:24px;
+    margin:4px 0;
+  }
+  .prompt-box{
+    font-size:22px!important;
+    padding:10px 14px;
+    border-radius:16px;
+    box-shadow:3px 3px 0 var(--ink);
+    display:flex;
+    width:100%;
+    justify-content:center;
+    text-align:center;
+  }
+
+  .toolbox{
+    position:relative!important;
+    top:auto!important;
+    padding:12px;
+    border-radius:18px;
+  }
+  .toolbox .colors{
+    grid-template-columns:repeat(6,1fr);
+    gap:8px;
+  }
+  .color{
+    width:28px;
+    height:28px;
+    margin:auto;
+  }
+  .tool-select,.tool{
+    padding:10px;
+    font-size:13px;
+  }
+
+  .canvas-wrap{
+    border-radius:18px;
+    box-shadow:4px 4px 0 var(--ink);
+    width:100%;
+  }
+  .canvas-top{
+    height:28px;
+    padding:0 10px;
+    gap:7px;
+  }
+  .canvas-top span{
+    width:9px;
+    height:9px;
+  }
+  #drawCanvas{
+    height:58vh!important;
+    min-height:390px;
+    max-height:620px;
+    width:100%;
+  }
+  .actions{
+    grid-template-columns:repeat(2,1fr)!important;
+    gap:8px;
+  }
+  .mobile-controls{
+    display:grid!important;
+    grid-template-columns:repeat(2,1fr)!important;
+    gap:8px;
+  }
+
+  .vote-carousel{
+    display:block;
+    margin-top:12px;
+  }
+  .vote-cards{
+    grid-template-columns:1fr!important;
+    gap:12px;
+  }
+  .vote-card{
+    min-height:auto;
+    padding:12px;
+    border-radius:18px;
+    box-shadow:4px 4px 0 var(--ink);
+  }
+  .drawing-preview{
+    height:260px;
+    margin-top:8px;
+  }
+  .zoom-btn{
+    opacity:1;
+    font-size:11px;
+    padding:7px 9px;
+  }
+  .arrow{
+    display:inline-flex!important;
+    width:46px;
+    height:46px;
+    margin:10px 6px;
+  }
+  .dots{
+    margin-top:12px;
+  }
+  .reaction-row{
+    gap:5px;
+  }
+  .reaction-btn{
+    font-size:10px;
+    padding:6px 7px;
+  }
+
+  .settings-panel,.about-panel{
+    position:static!important;
+    width:100%!important;
+    max-height:none!important;
+    margin-bottom:12px;
+  }
+  .theme-grid{
+    grid-template-columns:repeat(2,1fr)!important;
+  }
+
+  .modal{
+    padding:10px;
+  }
+  .modal-card{
+    border-radius:20px;
+    padding:14px;
+    box-shadow:6px 6px 0 var(--ink);
+  }
+  .close{
+    right:-8px;
+    top:-8px;
+    width:42px;
+    height:42px;
+  }
+  .zoom-paper{
+    height:72vh;
+    padding:8px;
+  }
+
+  .podium,.mvp-grid{
+    grid-template-columns:1fr!important;
+  }
+  .winner-heading{
+    font-size:34px!important;
+  }
+  .winner-crown{
+    font-size:54px;
+  }
+
+  .back-btn,.floating-back{
+    margin-bottom:10px;
+    padding:10px 14px;
+    width:auto;
+  }
+}
+
+@media(max-width: 420px){
+  .avatar-grid{grid-template-columns:repeat(3,1fr)!important}
+  .avatar-img{width:52px;height:52px}
+  h1{font-size:30px}
+  .home h2{font-size:42px}
+  #drawCanvas{height:56vh!important;min-height:360px}
+  .drawing-preview{height:230px}
+  .host-only .grid4,#hostSettings .grid4,.stat-grid{grid-template-columns:1fr!important}
+}

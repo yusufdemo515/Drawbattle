@@ -318,12 +318,14 @@ io.on("connection", (socket) => {
     startRound(room);
   });
 
-  socket.on("stroke", ({ code, stroke }) => {
+  socket.on("stroke", ({ code }) => {
+    // Private canvas mode:
+    // Drawing is NOT broadcast live to other players.
+    // Players only see drawings after submit during voting.
     const room = rooms.get(code);
     if (!room || room.phase !== "draw") return;
     const player = room.players.find(p => p.sessionId === socket.data.sessionId);
     if (player) player.lastActive = Date.now();
-    socket.to(code).emit("stroke", { sessionId: socket.data.sessionId, stroke });
   });
 
   socket.on("submitDrawing", ({ code, image }) => {
@@ -400,6 +402,36 @@ io.on("connection", (socket) => {
     const room = rooms.get(code);
     if (!isHost(socket, room) || room.phase !== "vote") return;
     finishVoting(room);
+  });
+
+
+  socket.on("leaveRoom", ({ code }) => {
+    const room = rooms.get(code);
+    if (!room) return;
+    const sessionId = socket.data.sessionId;
+    const idx = room.players.findIndex(p => p.sessionId === sessionId);
+    if (idx >= 0) {
+      const wasHost = room.hostSessionId === sessionId;
+      room.players.splice(idx, 1);
+      socket.leave(room.code);
+      const s = sessions.get(sessionId);
+      if (s) s.roomCode = null;
+
+      if (!room.players.length) {
+        endTimer(room);
+        rooms.delete(room.code);
+        io.emit("publicRooms", getRoomList());
+        socket.emit("leftRoom");
+        return;
+      }
+
+      if (wasHost) {
+        room.hostSessionId = room.players[0].sessionId;
+      }
+
+      socket.emit("leftRoom");
+      broadcastRoom(room);
+    }
   });
 
   socket.on("disconnect", () => {
