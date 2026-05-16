@@ -99,13 +99,28 @@ function makeRoom({ name, type, settings }) {
 
 function choosePrompt(room) {
   const list = PROMPTS[room.settings.mode] || PROMPTS.Hard;
-  let pool = list.filter(p => !room.usedPrompts.includes(p));
+  room.usedPrompts = room.usedPrompts || [];
+  room.recentPrompts = room.recentPrompts || [];
+
+  let pool = list.filter(p => 
+    !room.usedPrompts.includes(p) &&
+    !room.recentPrompts.includes(p)
+  );
+
   if (!pool.length) {
     room.usedPrompts = [];
-    pool = list;
+    pool = list.filter(p => !room.recentPrompts.includes(p));
   }
+
   const prompt = pool[Math.floor(Math.random() * pool.length)];
+
   room.usedPrompts.push(prompt);
+  room.recentPrompts.push(prompt);
+
+  if (room.recentPrompts.length > 25) {
+    room.recentPrompts.shift();
+  }
+
   return prompt;
 }
 
@@ -204,9 +219,23 @@ function finishVoting(room) {
     totals[random.sessionId] = 1;
   }
   const sorted = Object.entries(totals).sort((a,b) => b[1]-a[1]);
+  let topVotes = sorted.length ? sorted[0][1] : 0;
+
   sorted.forEach(([sessionId, votes], idx) => {
     const p = room.players.find(x => x.sessionId === sessionId);
-    if (p) p.score += votes * 100 + (idx === 0 ? 150 : 0);
+    if (!p) return;
+
+    let bonus = 0;
+
+    // Tie = both first place
+    if (votes === topVotes && topVotes > 0) {
+      bonus += 150;
+    }
+
+    // Small creativity bonus simulation
+    bonus += Math.floor(Math.random() * 40);
+
+    p.score += votes * 100 + bonus;
   });
   room.phase = "roundResults";
   room.timerEndsAt = Date.now() + 4000;
