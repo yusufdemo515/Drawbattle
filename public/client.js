@@ -53,7 +53,13 @@ socket.on("roomState", state => {
 socket.on("chat", chat => renderChatList(chat));
 socket.on("notice", showToast);
 socket.on("errorMsg", msg => showToast("❌ " + msg));
-socket.on("kicked", () => { showToast("You were kicked by host."); currentRoomCode=""; go("rooms"); });
+socket.on("kicked", (data) => {
+  showToast(data?.message || "You have been kicked by the host.");
+  currentRoomCode = "";
+  localStorage.removeItem("drawbattleRoomCode");
+  roomState = null;
+  go("create", false);
+});
 
 socket.on("leftRoom", () => {
   currentRoomCode = "";
@@ -372,6 +378,7 @@ function renderVoteCards(){
  voteDots.innerHTML=Array.from({length:pages}).map((_,i)=>`<span class="dot-page ${i===votePage?'active':''}"></span>`).join("");
  showingText.textContent=`Showing ${drawings.length?start+1:0}–${Math.min(start+3,drawings.length)} of ${drawings.length}`;
  finishVoteBtn.style.display = isMeHost() ? "" : "none";
+ finishVoteBtn.textContent = "Finish Voting Early";
 }
 function makeBlankDrawing(name){
  const c=document.createElement("canvas");c.width=900;c.height=604;const ctx=c.getContext("2d");ctx.fillStyle="#fff";ctx.fillRect(0,0,c.width,c.height);ctx.fillStyle="#cbd5e1";ctx.font="bold 46px Trebuchet MS";ctx.fillText("AFK / Blank",320,280);ctx.font="bold 30px Trebuchet MS";ctx.fillText(name,380,340);return c.toDataURL("image/png");

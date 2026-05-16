@@ -169,7 +169,7 @@
     <div>
      <div class="canvas-wrap"><div class="canvas-top"><span></span><span></span><span></span><span></span><span></span></div><canvas id="drawCanvas" width="900" height="604"></canvas></div>
      <div class="actions"><button onclick="undo()">↩ Undo</button><button onclick="redo()">↪ Redo</button><button onclick="clearCanvas()">🗑 Clear</button><button onclick="submitDrawing()">▶ Submit</button></div>
-     <div class="mobile-controls"><button onclick="setTool('pencil')">✏️ Pencil</button><button onclick="setTool('eraser')">🧽 Eraser</button><button onclick="undo()">↩ Undo</button><button onclick="submitDrawing()">▶ Submit</button></div>
+     <div class="mobile-controls"><button onclick="setTool('pencil')">✏️ Pencil</button><button onclick="setTool('eraser')">🧽 Eraser</button><button onclick="undo()">↩ Undo</button><button onclick="redo()">↪ Redo</button></div>
     </div>
    </div>
   </div>
@@ -183,7 +183,7 @@
   <div class="card">
    <div class="top-row">
      <div class="top-box"><small>Round</small><h2><span id="voteRound">1</span>/<span id="voteRounds">8</span></h2></div>
-     <div class="center"><div class="prompt-box">VOTING TIME</div><p><b>Vote secretly. Results show after voting.</b></p></div>
+     <div class="center"><div class="prompt-box">VOTING TIME</div><p><b>Vote secretly. Next round starts automatically when everyone votes.</b></p></div>
      <div class="top-box"><small>Time Left</small><h2 class="red" id="voteTimer">00:40</h2></div>
    </div>
    <div id="roundScore" class="score-pop" style="display:none"></div>

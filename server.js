@@ -352,6 +352,13 @@ io.on("connection", (socket) => {
     if (!room.players.some(p => p.sessionId === targetSessionId)) return;
     room.votes.set(voterId, targetSessionId);
     socket.emit("notice", "Vote saved.");
+
+    // Auto-finish voting when all connected eligible players have voted.
+    const connectedEligible = room.players.filter(p => p.connected);
+    const neededVotes = connectedEligible.filter(p => room.players.some(t => t.sessionId !== p.sessionId)).length;
+    if (neededVotes > 0 && room.votes.size >= neededVotes) {
+      finishVoting(room);
+    }
   });
 
   socket.on("reaction", ({ code, targetSessionId, reaction }) => {
@@ -382,7 +389,21 @@ io.on("connection", (socket) => {
     const idx = room.players.findIndex(p => p.sessionId === targetSessionId);
     if (idx >= 0) {
       const [kicked] = room.players.splice(idx, 1);
-      io.to(sessions.get(kicked.sessionId)?.socketId).emit("kicked");
+      const s = sessions.get(kicked.sessionId);
+      if (s) s.roomCode = null;
+      if (s?.socketId) {
+        io.to(s.socketId).emit("kicked", { message: "You have been kicked by the host." });
+        const kickedSocket = io.sockets.sockets.get(s.socketId);
+        if (kickedSocket) kickedSocket.leave(room.code);
+      }
+
+      if (!room.players.length) {
+        endTimer(room);
+        rooms.delete(room.code);
+        io.emit("publicRooms", getRoomList());
+        return;
+      }
+
       broadcastRoom(room);
     }
   });
@@ -426,7 +447,15 @@ io.on("connection", (socket) => {
       }
 
       if (wasHost) {
-        room.hostSessionId = room.players[0].sessionId;
+        // Host left: next connected player becomes host automatically.
+        const nextHost = room.players.find(p => p.connected) || room.players[0];
+        room.hostSessionId = nextHost.sessionId;
+        addChat(room, {
+          username: "System",
+          avatarSeed: "Robot",
+          message: `${nextHost.username} is the new host.`,
+          time: Date.now()
+        });
       }
 
       socket.emit("leftRoom");
