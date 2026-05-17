@@ -105,6 +105,11 @@ function makeDefaultProfile(profileId, username = "") {
     level: 1,
     wins: 0,
     matches: 0,
+    daily: { lastClaim: 0, streak: 0 },
+    badges: [],
+    friends: [],
+    friendRequestsIn: [],
+    friendRequestsOut: [],
     owned: [...DEFAULT_OWNED],
     avatarId: COSMETICS.freeAvatarIds[0] || "free_purple_glasses",
     bannerId: COSMETICS.freeBannerIds[0] || "banner_free_pink",
@@ -118,8 +123,8 @@ function getProfile(profileId, username = "") {
     if (username && isValidUsername(username) && !usernameTakenBy(normalizeUsername(username), profileId)) {
       // Do not fully reserve names automatically from Google display name.
       // Name reservation happens only after the first-time setup screen.
-      const safeName = cleanText(username, 24) || "";
-      profiles[profileId].username = safeName.trim().replace(/\s+/g, " ");
+      const safeName = safeCleanText(username, 24);
+      profiles[profileId].username = safeName.replace(/\s+/g, " ");
       profiles[profileId].usernameNormalized = normalizeUsername(username);
     }
     saveProfiles();
@@ -134,14 +139,75 @@ function sanitizeProfile(p) {
   if (p.decoId && !ITEM_MAP.has(p.decoId)) p.decoId = "";
   p.matches = Math.max(0, Number(p.matches || 0));
   p.level = Math.max(1, Math.floor((p.xp || 0) / 250) + 1);
-  const safeProfileName = cleanText(p.username || "", 24) || "";
-  p.username = safeProfileName.trim().replace(/\s+/g, " ");
+  const safeProfileName = safeCleanText(p.username || "", 24);
+  p.username = safeProfileName.replace(/\s+/g, " ");
   p.usernameNormalized = normalizeUsername(p.username);
   p.setupComplete = !!p.setupComplete || (!!p.username && p.username !== "Player" && !!p.usernameSetAt);
   p.usernameSetAt = Number(p.usernameSetAt || (p.setupComplete ? Date.now() : 0));
   p.lastUsernameChangeAt = Number(p.lastUsernameChangeAt || p.usernameSetAt || 0);
+  p.friends = Array.isArray(p.friends) ? [...new Set(p.friends)] : [];
+  p.friendRequestsIn = Array.isArray(p.friendRequestsIn) ? [...new Set(p.friendRequestsIn)] : [];
+  p.friendRequestsOut = Array.isArray(p.friendRequestsOut) ? [...new Set(p.friendRequestsOut)] : [];
+  p.badges = Array.isArray(p.badges) ? [...new Set(p.badges)] : [];
+  p.daily = p.daily && typeof p.daily === "object" ? p.daily : { lastClaim: 0, streak: 0 };
+  p.daily.lastClaim = Number(p.daily.lastClaim || 0);
+  p.daily.streak = Number(p.daily.streak || 0);
   return p;
 }
+
+function profilePublicLite(profileId) {
+  const p = profiles[profileId] ? sanitizeProfile(profiles[profileId]) : null;
+  if (!p) return null;
+  return {
+    profileId: p.profileId,
+    username: p.username || "Player",
+    avatarId: p.avatarId,
+    bannerId: p.bannerId,
+    decoId: p.decoId || "",
+    level: p.level || 1,
+    wins: p.wins || 0,
+    matches: p.matches || 0,
+    xp: p.xp || 0
+  };
+}
+function findProfileByUsername(name) {
+  const n = normalizeUsername(name);
+  if (!n) return null;
+  for (const p of Object.values(profiles)) {
+    const clean = sanitizeProfile(p);
+    if (clean.setupComplete && normalizeUsername(clean.username) === n) return clean;
+  }
+  return null;
+}
+function buildFriendsPayload(profile) {
+  profile = sanitizeProfile(profile);
+  return {
+    friends: profile.friends.map(profilePublicLite).filter(Boolean),
+    requestsIn: profile.friendRequestsIn.map(profilePublicLite).filter(Boolean),
+    requestsOut: profile.friendRequestsOut.map(profilePublicLite).filter(Boolean)
+  };
+}
+function emitFriends(socket, profile) {
+  try { socket.emit("friendsData", buildFriendsPayload(profile)); } catch (e) { console.error("emitFriends failed", e.message); }
+}
+function isSameDay(a, b) {
+  const da = new Date(Number(a || 0));
+  const db = new Date(Number(b || 0));
+  return da.getUTCFullYear() === db.getUTCFullYear() && da.getUTCMonth() === db.getUTCMonth() && da.getUTCDate() === db.getUTCDate();
+}
+function addBadge(profile, id) {
+  profile.badges = Array.isArray(profile.badges) ? profile.badges : [];
+  if (!profile.badges.includes(id)) profile.badges.push(id);
+}
+function updateBadges(profile) {
+  profile = sanitizeProfile(profile);
+  if ((profile.wins || 0) >= 1) addBadge(profile, "First Win 🏆");
+  if ((profile.wins || 0) >= 10) addBadge(profile, "10 Wins 🔥");
+  if ((profile.matches || 0) >= 5) addBadge(profile, "Regular Artist ✏️");
+  if ((profile.level || 1) >= 5) addBadge(profile, "Level 5 ⭐");
+  return profile;
+}
+
 function awardMatchRewards(room) {
   if (room.rewardsAwarded) return;
   room.rewardsAwarded = true;
@@ -239,7 +305,8 @@ function makeRoom({ name, type, settings }) {
       slots: Number(settings.slots || 10),
       timer: Number(settings.timer || 180),
       rounds: Number(settings.rounds || 8),
-      mode: settings.mode || "Hard"
+      mode: settings.mode || "Hard",
+      roomMode: ["Classic","Speed","Blind Draw","No Eraser","One Color","Hard Prompt"].includes(settings.roomMode) ? settings.roomMode : "Classic"
     },
     players: [],
     hostSessionId: null,
@@ -351,9 +418,10 @@ function startRound(room) {
 
   room.timerHandle = setTimeout(() => {
     room.phase = "draw";
-    room.timerEndsAt = Date.now() + room.settings.timer * 1000;
+    const drawSeconds = room.settings.roomMode === "Speed" ? Math.min(Number(room.settings.timer || 60), 60) : Number(room.settings.timer || 180);
+    room.timerEndsAt = Date.now() + drawSeconds * 1000;
     broadcastRoom(room);
-    room.timerHandle = setTimeout(() => startVoting(room), room.settings.timer * 1000 + 300);
+    room.timerHandle = setTimeout(() => startVoting(room), drawSeconds * 1000 + 300);
   }, 7000);
 }
 

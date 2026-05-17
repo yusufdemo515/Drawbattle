@@ -473,3 +473,16 @@ header{max-width:1240px;margin:0 auto 22px;gap:18px}
  .friend-actions button{width:100%}
  .chat-input-row{grid-template-columns:1fr 54px}
 }
+
+/* Final stability/layout fix */
+.player-banner-row{overflow:hidden!important;min-height:112px!important}
+.player-banner-content{display:grid!important;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;gap:10px!important;width:100%}
+.player-meta.safe{white-space:normal!important;overflow:visible!important;min-width:0!important}
+.player-name-line{display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:wrap}
+.player-name-line b{display:inline-block;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.player-meta small{display:block;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.player-actions{flex-wrap:nowrap!important;justify-content:flex-end!important}
+.player-actions .report-btn{padding:9px 12px!important;font-size:12px!important}
+.lobby-emote-bar{display:flex!important;gap:9px!important;min-height:50px!important;align-items:center!important}
+.lobby-emote-bar button{display:inline-flex!important;align-items:center!important;justify-content:center!important;width:46px!important;height:42px!important;padding:0!important;font-size:22px!important}
+@media(max-width:700px){.player-banner-content{grid-template-columns:auto 1fr auto!important}.player-actions{grid-column:2/5;justify-content:flex-start!important;margin-top:8px}.player-meta small{max-width:220px}.player-name-line b{max-width:180px}}

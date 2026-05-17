@@ -499,7 +499,7 @@ function renderLobby(){
  document.querySelectorAll(".host-only").forEach(el => el.style.display = isMeHost() ? "" : "none");
  playerList.innerHTML = roomState.players.map(p => {
   const canKick = isMeHost() && p.sessionId !== sessionId;
-  const actions = `${canKick?`<button class="report-btn" onclick="kick('${p.sessionId}')">Kick</button>`:""}${p.sessionId !== sessionId?`<button class="report-btn" onclick="reportPlayer('${p.sessionId}')">Report</button>`:""}`;
+  const actions = `${canKick?`<button class="report-btn" onclick="kick('${p.sessionId}')">Kick</button>`:""}`;
   return lobbyPlayerCardHtml(p, actions);
  }).join("");
  if(lobbyEmoteBar){ lobbyEmoteBar.innerHTML = ["😂","🔥","💀","😭","👀"].map(e=>`<button onclick="sendLobbyEmote('${e}')">${e}</button>`).join(""); }
