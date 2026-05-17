@@ -259,6 +259,14 @@
  </div>
 </div>
 
+
+<div id="publicProfileModal" class="modal" onclick="closePublicProfile()">
+ <div class="modal-card public-profile-card" onclick="event.stopPropagation()">
+  <button class="close" onclick="closePublicProfile()">✕</button>
+  <div id="publicProfileContent"></div>
+ </div>
+</div>
+
 <script src="/socket.io/socket.io.js"></script>
 <script src="/cosmetics.js"></script>
 <script src="/client.js"></script>

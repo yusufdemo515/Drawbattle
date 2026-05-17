@@ -43,6 +43,25 @@ function decoratedAvatarHtml(avatarId, decoId="", cls="avatar-img"){
  const deco = decoId ? findCosmetic(decoId) : null;
  return `<span class="avatar-deco-wrap"><img class="${cls}" src="${avatarUrl(avatarId)}">${deco?`<img class="avatar-deco" src="${deco.url}">`:""}</span>`;
 }
+
+function lobbyPlayerCardHtml(p, actions=""){
+ const banner = bannerCss(p.bannerId || "banner_free_pink");
+ const level = p.level || 1;
+ const role = p.host ? "Host" : "Player";
+ const status = p.connected ? "Online" : "Reconnecting";
+ return `<div class="player-row player-banner-row clickable-player" onclick="openPublicProfile('${p.sessionId}')" title="View profile" style="background:${banner};background-size:cover;background-position:center">
+  <div class="player-banner-overlay"></div>
+  <div class="player-banner-content">
+   ${decoratedAvatarHtml(p.avatarSeed,p.decoId)}
+   <div class="player-meta safe">
+    <div class="player-name-line"><b>${p.username}</b><span class="level-chip">Lv.${level}</span></div>
+    <small>${role} • ${p.score} pts • ${status}</small>
+   </div>
+   <span class="dot" style="background:${p.connected?'#22c55e':'#f59e0b'}"></span>
+   <div class="player-actions" onclick="event.stopPropagation()">${actions}</div>
+  </div>
+ </div>`;
+}
 function defaultProfile(){
  return {
   profileId: profileId || ("P-" + Math.random().toString(36).slice(2,10).toUpperCase()),
@@ -292,7 +311,10 @@ function renderLobby(){
  lobbyRounds.value = roomState.settings.rounds;
  lobbyMode.value = roomState.settings.mode;
  document.querySelectorAll(".host-only").forEach(el => el.style.display = isMeHost() ? "" : "none");
- playerList.innerHTML = roomState.players.map(p => `<div class="player-row">${decoratedAvatarHtml(p.avatarSeed,p.decoId)}<div class="safe"><b>${p.username}</b><br><small>${p.host?'Host':'Player'} • ${p.score} pts ${p.connected?'':'• reconnecting'}</small></div><span class="dot" style="background:${p.connected?'#22c55e':'#f59e0b'}"></span>${!p.host && isMeHost()?`<button class="report-btn" onclick="kick('${p.sessionId}')">Kick</button>`:""}${!p.host?`<button class="report-btn" onclick="reportPlayer('${p.sessionId}')">Report</button>`:""}</div>`).join("");
+ playerList.innerHTML = roomState.players.map(p => {
+  const actions = `${!p.host && isMeHost()?`<button class="report-btn" onclick="kick('${p.sessionId}')">Kick</button>`:""}${!p.host?`<button class="report-btn" onclick="reportPlayer('${p.sessionId}')">Report</button>`:""}`;
+  return lobbyPlayerCardHtml(p, actions);
+ }).join("");
  renderChatList(roomState.chat || []);
 }
 function kick(id){ socket.emit("kick", { code: currentRoomCode, targetSessionId: id }); }
@@ -448,7 +470,7 @@ function renderResults(){
  podium.innerHTML=[["2",ranking[1],"height:150px;background:#e5e7eb"],["1",ranking[0],"height:210px;background:var(--accent)"],["3",ranking[2],"height:120px;background:#e5e7eb"]].filter(x=>x[1]).map(p=>`<div>${decoratedAvatarHtml(p[1].avatarSeed,p[1].decoId)}<h3 class="safe">${p[1].username}</h3><b>${p[1].score} pts</b><div class="bar" style="${p[2]}">#${p[0]}</div></div>`).join("");
  const shuffled=[...ranking].sort(()=>Math.random()-.5);
  mvpCards.innerHTML=[["Most Funny Drawing 😂",shuffled[0]],["Most Cursed Art 👻",shuffled[1]||shuffled[0]],["Most Confusing 🌀",shuffled[2]||shuffled[0]]].map(m=>`<div class="mvp-card"><h3>${m[0]}</h3>${decoratedAvatarHtml(m[1].avatarSeed,m[1].decoId)}<div><b>${m[1].username}</b></div></div>`).join("");
- finalList.innerHTML=ranking.map((p,i)=>`<div class="player-row">${decoratedAvatarHtml(p.avatarSeed,p.decoId)}<b>#${i+1} ${p.username}</b><span style="margin-left:auto;font-weight:1000">${p.score} pts</span></div>`).join("");
+ finalList.innerHTML=ranking.map((p,i)=>`<div class="player-row clickable-player" onclick="openPublicProfile('${p.sessionId}')">${decoratedAvatarHtml(p.avatarSeed,p.decoId)}<b>#${i+1} ${p.username}</b><span style="margin-left:auto;font-weight:1000">${p.score} pts</span></div>`).join("");
  if(roomState.rewards && roomState.rewards[sessionId]){
   const r = roomState.rewards[sessionId];
   const key = `${currentRoomCode}-${roomState.round}-${r.place}-${r.coins}-${r.xp}`;
@@ -474,6 +496,41 @@ function openZoom(name,num,img){playSfx("zoom");currentZoomData=img;zoomTitle.te
 function closeZoom(){zoomModal.classList.remove("active")}
 function downloadZoomDrawing(){if(!currentZoomData)return;const a=document.createElement("a");a.href=currentZoomData;a.download="drawbattle-drawing.png";a.click();showToast("⬇ Drawing downloaded")}
 
+
+
+function openPublicProfile(targetSessionId){
+ const p = roomState?.players?.find(x => x.sessionId === targetSessionId);
+ if(!p || !publicProfileModal || !publicProfileContent) return;
+ playSfx("zoom");
+ const banner = bannerCss(p.bannerId || "banner_free_pink");
+ const av = findCosmetic(p.avatarSeed);
+ const de = p.decoId ? findCosmetic(p.decoId) : null;
+ const bn = findCosmetic(p.bannerId);
+ const safeName = (p.username || "Player").replace(/[<>]/g, "");
+ publicProfileContent.innerHTML = `
+  <div class="public-profile-banner" style="background:${banner};background-size:cover;background-position:center">
+   <div class="public-profile-overlay"></div>
+   <div class="public-profile-avatar">${decoratedAvatarHtml(p.avatarSeed,p.decoId,'avatar-img public-profile-avatar-img')}</div>
+  </div>
+  <div class="public-profile-body">
+   <div class="row-wrap">
+    <div><h2>${safeName}</h2><div class="small"><b>${p.host ? "Room Host" : "Player"}</b> • ${p.connected ? "Online" : "Reconnecting"}</div></div>
+    <span class="pill level-pill">⭐ Lv.${p.level || 1}</span>
+   </div>
+   <div class="public-stats-grid">
+    <div class="setting-box"><small>Match Score</small><b>${p.score || 0}</b></div>
+    <div class="setting-box"><small>Total Wins</small><b>${p.wins || 0}</b></div>
+    <div class="setting-box"><small>Matches</small><b>${p.matches || 0}</b></div>
+    <div class="setting-box"><small>XP</small><b>${p.xp || 0}</b></div>
+   </div>
+   <div class="public-equipped-line">
+    <b>Equipped:</b> ${av?.name || "Default Avatar"} • ${bn?.name || "Default Banner"} • ${de?.name || "No Decoration"}
+   </div>
+   <p class="small"><b>Coins and owned inventory are private.</b></p>
+  </div>`;
+ publicProfileModal.classList.add("active");
+}
+function closePublicProfile(){ if(publicProfileModal) publicProfileModal.classList.remove("active"); }
 
 function renderProfilePage(){
  const p = userProfile || defaultProfile();

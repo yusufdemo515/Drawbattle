@@ -46,6 +46,7 @@ function makeDefaultProfile(profileId, username = "") {
     xp: 0,
     level: 1,
     wins: 0,
+    matches: 0,
     owned: [...DEFAULT_OWNED],
     avatarId: COSMETICS.freeAvatarIds[0] || "free_purple_glasses",
     bannerId: COSMETICS.freeBannerIds[0] || "banner_free_pink",
@@ -63,6 +64,7 @@ function sanitizeProfile(p) {
   if (!ITEM_MAP.has(p.avatarId)) p.avatarId = COSMETICS.freeAvatarIds[0];
   if (!ITEM_MAP.has(p.bannerId)) p.bannerId = COSMETICS.freeBannerIds[0];
   if (p.decoId && !ITEM_MAP.has(p.decoId)) p.decoId = "";
+  p.matches = Math.max(0, Number(p.matches || 0));
   p.level = Math.max(1, Math.floor((p.xp || 0) / 250) + 1);
   return p;
 }
@@ -81,6 +83,7 @@ function awardMatchRewards(room) {
     const xp = xpTable[index] || 15;
     profile.coins = (profile.coins || 0) + coins;
     profile.xp = (profile.xp || 0) + xp;
+    profile.matches = (profile.matches || 0) + 1;
     if (index === 0) profile.wins = (profile.wins || 0) + 1;
     sanitizeProfile(profile);
     room.rewards[player.sessionId] = { coins, xp, place: index + 1 };
@@ -207,6 +210,10 @@ function serializeRoom(room) {
       profileId: p.profileId || "",
       bannerId: p.bannerId || "",
       decoId: p.decoId || "",
+      level: sanitizeProfile(profiles[p.profileId] || p).level || p.level || 1,
+      xp: sanitizeProfile(profiles[p.profileId] || p).xp || 0,
+      wins: sanitizeProfile(profiles[p.profileId] || p).wins || 0,
+      matches: sanitizeProfile(profiles[p.profileId] || p).matches || 0,
       score: p.score,
       host: p.sessionId === room.hostSessionId,
       connected: p.connected,
@@ -329,6 +336,21 @@ function equipProfileItem(profile, item) {
   if (item.kind === "deco") profile.decoId = item.id;
 }
 
+function syncProfileToActivePlayer(sessionId, profile) {
+  const sess = sessions.get(sessionId);
+  const room = sess?.roomCode ? rooms.get(sess.roomCode) : null;
+  if (!room) return;
+  const player = room.players.find(p => p.sessionId === sessionId || p.profileId === profile.profileId);
+  if (!player) return;
+  player.profileId = profile.profileId;
+  player.username = profile.username || player.username;
+  player.avatarSeed = profile.avatarId || player.avatarSeed;
+  player.bannerId = profile.bannerId || player.bannerId;
+  player.decoId = profile.decoId || "";
+  player.level = profile.level || 1;
+  broadcastRoom(room);
+}
+
 function isHost(socket, room) {
   const sessionId = socket.data.sessionId;
   return room && room.hostSessionId === sessionId;
@@ -374,6 +396,7 @@ io.on("connection", (socket) => {
     const profile = sanitizeProfile(getProfile(profileId, username));
     if (username && cleanText(username, 24)) profile.username = cleanText(username, 24);
     saveProfiles();
+    syncProfileToActivePlayer(socket.data.sessionId, profile);
     socket.emit("profileData", profile);
   });
 
@@ -389,6 +412,7 @@ io.on("connection", (socket) => {
     equipProfileItem(profile, item);
     sanitizeProfile(profile);
     saveProfiles();
+    syncProfileToActivePlayer(socket.data.sessionId, profile);
     socket.emit("profileData", profile);
   });
 
@@ -401,6 +425,7 @@ io.on("connection", (socket) => {
     else equipProfileItem(profile, item);
     sanitizeProfile(profile);
     saveProfiles();
+    syncProfileToActivePlayer(socket.data.sessionId, profile);
     socket.emit("profileData", profile);
   });
 
@@ -419,7 +444,7 @@ io.on("connection", (socket) => {
     avatarSeed = owned.has(avatarSeed) ? avatarSeed : (prof?.avatarId || COSMETICS.freeAvatarIds[0]);
     bannerId = owned.has(bannerId) ? bannerId : (prof?.bannerId || COSMETICS.freeBannerIds[0]);
     decoId = owned.has(decoId) ? decoId : (prof?.decoId || "");
-    room.players.push({ sessionId, profileId: prof?.profileId || "", username, avatarSeed: avatarSeed || COSMETICS.freeAvatarIds[0], bannerId, decoId, score: 0, connected: true, lastActive: Date.now() });
+    room.players.push({ sessionId, profileId: prof?.profileId || "", username, avatarSeed: avatarSeed || COSMETICS.freeAvatarIds[0], bannerId, decoId, level: prof?.level || 1, score: 0, connected: true, lastActive: Date.now() });
     rooms.set(room.code, room);
     sessions.set(sessionId, { socketId: socket.id, roomCode: room.code });
     socket.join(room.code);
@@ -444,7 +469,7 @@ io.on("connection", (socket) => {
     bannerId = owned.has(bannerId) ? bannerId : (prof?.bannerId || COSMETICS.freeBannerIds[0]);
     decoId = owned.has(decoId) ? decoId : (prof?.decoId || "");
     if (!player) {
-      player = { sessionId, profileId: prof?.profileId || "", username, avatarSeed: avatarSeed || COSMETICS.freeAvatarIds[0], bannerId, decoId, score: 0, connected: true, lastActive: Date.now() };
+      player = { sessionId, profileId: prof?.profileId || "", username, avatarSeed: avatarSeed || COSMETICS.freeAvatarIds[0], bannerId, decoId, level: prof?.level || 1, score: 0, connected: true, lastActive: Date.now() };
       room.players.push(player);
     } else {
       player.connected = true;
@@ -453,6 +478,7 @@ io.on("connection", (socket) => {
       player.avatarSeed = avatarSeed || player.avatarSeed;
       player.bannerId = bannerId || player.bannerId;
       player.decoId = decoId || player.decoId || "";
+      player.level = prof?.level || player.level || 1;
     }
     sessions.set(sessionId, { socketId: socket.id, roomCode: room.code });
     socket.join(room.code);

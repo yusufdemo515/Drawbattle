@@ -93,3 +93,9 @@ This is a functional multiplayer build, but before public launch you should late
 - rate limiting
 - production logging
 - HTTPS deployment
+
+
+## Latest Update
+- Lobby/final player cards can be clicked to view public profile.
+- Public profile shows banner, avatar decoration, level, XP, wins, matches, match score.
+- Coins and owned inventory remain private.

@@ -341,3 +341,32 @@ input[type="range"]::-moz-range-thumb{width:28px;height:28px;border-radius:50%;b
 /* ===== Account / Profile / Shop additions - preserves cozy notebook theme ===== */
 .profile-layout{display:grid;grid-template-columns:1.15fr .85fr;gap:18px;align-items:start}.profile-card-main{overflow:hidden;padding:0}.profile-banner{height:180px;border-bottom:4px solid var(--ink);background-size:cover!important;background-position:center!important;position:relative}.profile-info{padding:74px 22px 22px}.profile-avatar-wrap{position:absolute;left:26px;bottom:-58px;width:132px;height:132px;display:grid;place-items:center;overflow:visible}.profile-avatar-img{width:94px!important;height:94px!important;border:4px solid var(--ink);box-shadow:4px 4px 0 var(--ink);background:#fff}.profile-deco-img{position:absolute;left:50%;top:50%;width:120px;height:120px;transform:translate(-50%,-50%);object-fit:contain;z-index:4;pointer-events:none;filter:drop-shadow(0 3px 3px rgba(0,0,0,.14))}.row-wrap{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.profile-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:16px 0}.coin-pill{background:#fef3c7!important}.level-pill{background:#e0f2fe!important}.shop-tabs{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0 18px}.shop-tab.active{background:#fef08a!important;transform:rotate(-1deg)}.shop-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}.shop-item{background:var(--paper2);border:3px solid var(--ink);border-radius:22px;box-shadow:5px 5px 0 var(--ink);padding:14px;text-align:center;min-width:0}.shop-item h3{font-size:17px;min-height:42px;margin:10px 0 8px}.shop-avatar{width:92px!important;height:92px!important}.shop-banner-preview{height:92px;border:3px solid var(--ink);border-radius:16px;margin-bottom:10px;box-shadow:3px 3px 0 var(--ink)}.shop-deco-preview{height:118px;display:grid;place-items:center;overflow:visible}.avatar-deco-wrap{position:relative;display:inline-grid;place-items:center;width:54px;height:54px;overflow:visible;vertical-align:middle;flex:0 0 auto}.avatar-deco-wrap .avatar-img{width:44px;height:44px}.avatar-deco{position:absolute;left:50%;top:50%;width:58px;height:58px;transform:translate(-50%,-50%);object-fit:contain;z-index:4;pointer-events:none;filter:drop-shadow(0 2px 2px rgba(0,0,0,.14))}.shop-deco-preview .avatar-deco-wrap{width:112px;height:112px}.shop-deco-preview .avatar-deco-wrap .shop-avatar{width:78px!important;height:78px!important}.shop-deco-preview .avatar-deco{width:104px;height:104px}.price-pill{display:inline-block;background:#fef3c7;border:2px solid var(--ink);border-radius:999px;padding:5px 10px;font-weight:1000;margin-bottom:10px}.shop-item button{width:100%}
 @media(max-width:900px){.profile-layout{grid-template-columns:1fr}.profile-stats{grid-template-columns:1fr 1fr 1fr}.shop-grid{grid-template-columns:repeat(2,1fr)}.header-actions{grid-template-columns:1fr 1fr!important}.profile-info{padding:70px 16px 16px}.profile-avatar-wrap{left:16px}.shop-item h3{font-size:14px;min-height:36px}.shop-banner-preview{height:72px}}
+
+
+/* Lobby player cards: show equipped banner + avatar decoration + level */
+.player-banner-row{position:relative;overflow:hidden;min-height:104px;align-items:center;background-size:cover!important;background-position:center!important;border-width:3px!important;padding:12px!important}
+.player-banner-overlay{position:absolute;inset:0;background:rgba(255,250,240,.78);backdrop-filter:blur(1px);z-index:0}
+.player-banner-content{position:relative;z-index:1;display:flex;align-items:center;gap:12px;width:100%;min-width:0}
+.player-meta{flex:1;min-width:0;text-shadow:0 1px 0 rgba(255,255,255,.85)}
+.player-name-line{display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:wrap}
+.level-chip{display:inline-flex;align-items:center;justify-content:center;background:#e0f2fe;border:2px solid var(--ink);border-radius:999px;padding:2px 8px;font-size:11px;font-weight:1000;box-shadow:2px 2px 0 var(--ink)}
+.player-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.player-banner-row .avatar-deco-wrap{width:68px;height:68px}
+.player-banner-row .avatar-deco-wrap .avatar-img{width:52px!important;height:52px!important;border:3px solid var(--ink);box-shadow:2px 2px 0 var(--ink);background:#fff}
+.player-banner-row .avatar-deco{width:68px;height:68px}
+@media(max-width:900px){.player-banner-row{min-height:96px}.player-banner-content{gap:10px}.player-actions{width:100%;justify-content:flex-start}.player-banner-row .avatar-deco-wrap{width:64px;height:64px}.player-banner-row .avatar-deco-wrap .avatar-img{width:50px!important;height:50px!important}.player-banner-row .avatar-deco{width:66px;height:66px}}
+
+.clickable-player{cursor:pointer;transition:transform .18s ease, filter .18s ease}
+.clickable-player:hover{transform:translateY(-3px) rotate(-.4deg);filter:brightness(1.02)}
+.public-profile-card{max-width:760px;overflow:hidden;padding:0!important}
+.public-profile-banner{height:210px;border-bottom:4px solid var(--ink);position:relative;background-size:cover!important;background-position:center!important}
+.public-profile-overlay{position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,250,240,.30),rgba(255,250,240,.78))}
+.public-profile-avatar{position:absolute;left:28px;bottom:-62px;width:146px;height:146px;display:grid;place-items:center;overflow:visible;z-index:2}
+.public-profile-avatar .avatar-deco-wrap{width:146px;height:146px}
+.public-profile-avatar .public-profile-avatar-img{width:98px!important;height:98px!important;border:4px solid var(--ink);box-shadow:4px 4px 0 var(--ink);background:#fff}
+.public-profile-avatar .avatar-deco{width:126px;height:126px}
+.public-profile-body{padding:78px 24px 24px;background:var(--paper)}
+.public-profile-body h2{font-size:36px;margin:0 0 4px}
+.public-stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:18px 0}
+.public-equipped-line{background:var(--paper2);border:3px solid var(--ink);box-shadow:4px 4px 0 var(--ink);border-radius:18px;padding:14px;font-weight:900;margin:12px 0}
+@media(max-width:900px){.public-profile-banner{height:170px}.public-profile-body{padding:72px 16px 16px}.public-stats-grid{grid-template-columns:repeat(2,1fr)}.public-profile-avatar{left:16px;width:132px;height:132px}.public-profile-avatar .avatar-deco-wrap{width:132px;height:132px}.public-profile-avatar .public-profile-avatar-img{width:90px!important;height:90px!important}.public-profile-avatar .avatar-deco{width:116px;height:116px}}
