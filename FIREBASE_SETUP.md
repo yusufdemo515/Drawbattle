@@ -1,33 +1,36 @@
-# Firebase Database Setup for DrawBattle
+# DrawBattle Firebase Setup
 
-Current build is production-friendly for Render because it runs immediately with Node.js + Socket.IO. Profile/account data is saved in `data/profiles.json` by default.
+This build includes Google Login + Firestore profile sync.
 
-For Firebase/Firestore setup later:
+## Firebase Console steps
 
-1. Go to Firebase Console.
-2. Create a project named `drawbattle` or your own name.
-3. Build > Firestore Database > Create database.
-4. Start in test mode while developing.
-5. Install Firebase CLI:
+1. Go to Firebase Console → Project `drawbattle-buddhu`.
+2. Authentication → Sign-in method → enable **Google**.
+3. Authentication → Settings → Authorized domains → add your Render domain:
+   - `drawbattle-uyje.onrender.com`
+   - also keep `localhost` for local testing.
+4. Firestore Database → Create database.
+5. Firestore Database → Rules → paste `firestore.rules` from this project → Publish.
 
-```bash
-npm install -g firebase-tools
-firebase login
-firebase init firestore
-```
+## What is saved in Firestore
 
-6. Keep these included files:
+`users/{uid}` saves private player data:
+- username
+- avatarId / bannerId / decoId
+- coins
+- XP / level
+- wins / matches
+- owned cosmetics
 
-```text
-firebase.json
-firestore.rules
-firestore.indexes.json
-```
+`publicProfiles/{uid}` saves public profile card data only:
+- username
+- avatar/banner/decoration
+- level, XP, wins, matches
 
-7. Deploy Firestore rules:
+Coins and inventory are not stored in public profile docs.
 
-```bash
-firebase deploy --only firestore:rules
-```
+## Current AI Detector Status
 
-Important: before public launch, make Firestore rules secure. The included rules are development/test rules only.
+AI drawing detector is intentionally OFF for now.
+Current safety is manual report + host review blur.
+Real prompt-match AI and automatic adult/illegal image detection can be added later with a Vision API key.

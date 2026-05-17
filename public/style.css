@@ -384,3 +384,11 @@ input[type="range"]::-moz-range-thumb{width:28px;height:28px;border-radius:50%;b
 .sfx-pack-option small{display:block;color:#64748b;font-size:11px;margin-top:4px}
 .sfx-pack-option.active{background:var(--accent);transform:rotate(-1deg);box-shadow:5px 5px 0 var(--ink)}
 @media(max-width:520px){.sfx-pack-grid{grid-template-columns:1fr}.sfx-pack-option{min-height:56px}}
+
+
+/* Firebase login / account panel */
+.auth-panel{background:#fffdf7}
+.auth-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+.auth-ok{background:#dcfce7!important}
+.auth-warn{background:#fef3c7!important}
+.sync-chip{display:inline-flex;align-items:center;gap:6px;border:2px solid #111827;border-radius:999px;padding:4px 10px;background:#e0f2fe;font-weight:900;box-shadow:2px 2px 0 #111827}

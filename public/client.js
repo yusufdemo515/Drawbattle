@@ -78,15 +78,65 @@ function defaultProfile(){
  };
 }
 
+async function handleFirebaseAuthChanged(user){
+ try{
+  if(!window.drawBattleFirebase?.enabled){ return; }
+  if(!user){
+   showToast("Guest mode active. Login to save progress in cloud.");
+   renderProfilePage(); renderShop();
+   return;
+  }
+  const local = userProfile || defaultProfile();
+  const cloudProfile = await window.drawBattleFirebase.ensureCloudProfile(user, local);
+  profileId = cloudProfile.profileId;
+  localStorage.setItem("drawbattleProfileId", profileId);
+  localStorage.setItem("drawbattleUsername", cloudProfile.username || user.displayName || "Player");
+  userProfile = cloudProfile;
+  selectedSeed = cloudProfile.avatarId || selectedSeed;
+  localStorage.setItem("drawbattleSeed", selectedSeed);
+  if(username && !username.value) username.value = cloudProfile.username || user.displayName || "";
+  socket.emit("profileCloudSync", { profile: cloudProfile });
+  socket.emit("profileLogin", { profileId, username: cloudProfile.username || user.displayName || "" });
+  renderAvatars(); renderProfilePage(); renderShop();
+  showToast("✅ Firebase login connected");
+ }catch(e){
+  console.error("Firebase auth profile load failed", e);
+  showToast("Firebase profile load failed. Check Firestore rules.");
+ }
+}
+window.handleFirebaseAuthChanged = handleFirebaseAuthChanged;
+
+async function handleServerProfileData(profile){
+ if(!profile) return;
+ userProfile = profile;
+ profileId = profile.profileId;
+ localStorage.setItem("drawbattleProfileId", profileId);
+ selectedSeed = profile.avatarId || selectedSeed;
+ localStorage.setItem("drawbattleSeed", selectedSeed);
+ if(profile.username) localStorage.setItem("drawbattleUsername", profile.username);
+ renderAvatars(); renderProfilePage(); renderShop();
+ try{
+  if(window.drawBattleFirebase?.user && profile.profileId === "fb_" + window.drawBattleFirebase.user.uid){
+    await window.drawBattleFirebase.saveProfile(profile);
+  }
+ }catch(e){ console.warn("Cloud profile save failed", e); }
+}
+
 socket.emit("identify", { sessionId });
 
 socket.on("session", ({ sessionId: sid }) => {
   sessionId = sid;
   localStorage.setItem("drawbattleSessionId", sid);
-  if(!profileId){ profileId = "P-" + sid.slice(0,8).toUpperCase(); localStorage.setItem("drawbattleProfileId", profileId); }
-  socket.emit("profileLogin", { profileId, username: localStorage.getItem("drawbattleUsername") || "" });
+  if(window.drawBattleFirebase?.user){
+    profileId = "fb_" + window.drawBattleFirebase.user.uid;
+    localStorage.setItem("drawbattleProfileId", profileId);
+    handleFirebaseAuthChanged(window.drawBattleFirebase.user);
+  } else {
+    if(!profileId){ profileId = "P-" + sid.slice(0,8).toUpperCase(); localStorage.setItem("drawbattleProfileId", profileId); }
+    socket.emit("profileLogin", { profileId, username: localStorage.getItem("drawbattleUsername") || "" });
+  }
 });
-socket.on("profileData", (profile) => { userProfile = profile; profileId = profile.profileId; localStorage.setItem("drawbattleProfileId", profileId); selectedSeed = profile.avatarId || selectedSeed; localStorage.setItem("drawbattleSeed", selectedSeed); renderAvatars(); renderProfilePage(); renderShop(); });
+socket.on("profileData", (profile) => handleServerProfileData(profile));
 socket.on("shopError", msg => showToast("❌ " + msg));
 socket.on("publicRooms", renderPublicRooms);
 socket.on("joinedRoom", ({ code }) => {

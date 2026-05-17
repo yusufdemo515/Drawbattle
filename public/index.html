@@ -83,6 +83,15 @@
    </div>
   </div>
   <div class="card">
+   <h2>Account Login</h2>
+   <div id="authPanel" class="field auth-panel">
+    <b id="authStatus">Guest mode</b>
+    <p class="small" id="authHint">Login with Google to save profile, coins, XP, inventory and equipped cosmetics in Firebase.</p>
+    <div class="auth-actions">
+      <button id="googleLoginBtn" onclick="firebaseGoogleLogin()">🔐 Login with Google</button>
+      <button id="logoutBtn" onclick="firebaseLogout()" style="display:none">Logout</button>
+    </div>
+   </div>
    <h2>Rewards</h2>
    <div class="field"><b>Normal Match</b><br>1st: 60 coins • 2nd: 35 coins • 3rd: 15 coins • Others: 0</div>
    <div class="field"><b>Small Match</b><br>1st: 20 coins • 2nd: 10 coins • Others: 0</div>
@@ -272,8 +281,13 @@
  </div>
 </div>
 
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-analytics-compat.js"></script>
 <script src="/socket.io/socket.io.js"></script>
 <script src="/cosmetics.js"></script>
+<script src="/firebase-client.js"></script>
 <script src="/client.js"></script>
 </body>
 </html>

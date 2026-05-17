@@ -1,8 +1,30 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /profiles/{profileId} {
-      allow read, write: if true;
+    function signedIn() {
+      return request.auth != null;
+    }
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    // Private player account data: coins, XP, inventory, equipped cosmetics.
+    match /users/{uid} {
+      allow read, create, update: if isOwner(uid);
+      allow delete: if false;
+    }
+
+    // Public profile card shown to other players. Coins / inventory should never be stored here.
+    match /publicProfiles/{uid} {
+      allow read: if true;
+      allow create, update: if isOwner(uid);
+      allow delete: if false;
+    }
+
+    // Match history can be added later. Locked for now.
+    match /matches/{matchId} {
+      allow read: if signedIn();
+      allow write: if false;
     }
   }
 }

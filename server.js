@@ -58,7 +58,7 @@ function makeDefaultProfile(profileId, username = "") {
   };
 }
 function getProfile(profileId, username = "") {
-  profileId = cleanText(profileId, 40) || nanoid(12);
+  profileId = cleanText(profileId, 90) || nanoid(12);
   if (!profiles[profileId]) { profiles[profileId] = makeDefaultProfile(profileId, username); saveProfiles(); }
   if (username && cleanText(username, 24)) profiles[profileId].username = cleanText(username, 24);
   return profiles[profileId];
@@ -361,6 +361,25 @@ function finishVoting(room) {
   }, 4200);
 }
 
+function mergeCloudProfile(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const profileId = cleanText(raw.profileId, 80);
+  if (!profileId || !profileId.startsWith("fb_")) return null;
+  const current = getProfile(profileId, raw.username || "");
+  current.username = cleanText(raw.username, 24) || current.username || "Player";
+  current.coins = Math.max(0, Number(raw.coins || current.coins || 0));
+  current.xp = Math.max(0, Number(raw.xp || current.xp || 0));
+  current.wins = Math.max(0, Number(raw.wins || current.wins || 0));
+  current.matches = Math.max(0, Number(raw.matches || current.matches || 0));
+  current.owned = Array.isArray(raw.owned) ? raw.owned.filter(id => ITEM_MAP.has(id)).slice(0, 300) : current.owned;
+  current.avatarId = ITEM_MAP.has(raw.avatarId) ? raw.avatarId : current.avatarId;
+  current.bannerId = ITEM_MAP.has(raw.bannerId) ? raw.bannerId : current.bannerId;
+  current.decoId = raw.decoId && ITEM_MAP.has(raw.decoId) ? raw.decoId : "";
+  sanitizeProfile(current);
+  saveProfiles();
+  return current;
+}
+
 function equipProfileItem(profile, item) {
   if (item.kind === "avatar") profile.avatarId = item.id;
   if (item.kind === "banner") profile.bannerId = item.id;
@@ -416,6 +435,13 @@ io.on("connection", (socket) => {
   socket.on("profileLogin", ({ profileId, username }) => {
     const profile = sanitizeProfile(getProfile(profileId, username));
     socket.emit("profileData", profile);
+  });
+
+  socket.on("profileCloudSync", ({ profile }) => {
+    const merged = mergeCloudProfile(profile);
+    if (!merged) return socket.emit("shopError", "Cloud profile sync failed.");
+    syncProfileToActivePlayer(socket.data.sessionId, merged);
+    socket.emit("profileData", merged);
   });
 
   socket.on("getProfile", ({ profileId }) => {
