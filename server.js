@@ -44,11 +44,17 @@ try { fs.mkdirSync(DATA_DIR, { recursive: true }); profiles = JSON.parse(fs.read
 function saveProfiles() { try { fs.writeFileSync(PROFILE_FILE, JSON.stringify(profiles, null, 2)); } catch (e) { console.error("Profile save failed", e.message); } }
 
 const USERNAME_CHANGE_COOLDOWN_MS = 15 * 24 * 60 * 60 * 1000;
+
+function safeCleanText(value, max = 80) {
+  const cleaned = cleanText(String(value ?? ""), max);
+  return String(cleaned ?? "").trim();
+}
+
 function normalizeUsername(name) {
-  return cleanText(String(name || ""), 24).trim().replace(/\s+/g, " ").toLowerCase();
+  return safeCleanText(name, 24).replace(/\s+/g, " ").toLowerCase();
 }
 function isValidUsername(name) {
-  const n = cleanText(String(name || ""), 24).trim();
+  const n = safeCleanText(name, 24);
   // 3-18 chars, letters/numbers/space/underscore only, must contain at least one letter/number.
   return n.length >= 3 && n.length <= 18 && /^[A-Za-z0-9_ ]+$/.test(n) && /[A-Za-z0-9]/.test(n);
 }
@@ -65,7 +71,7 @@ function usernameCooldownLeft(profile) {
   return Math.max(0, USERNAME_CHANGE_COOLDOWN_MS - (Date.now() - Number(profile.lastUsernameChangeAt || 0)));
 }
 function setProfileUsername(profile, desiredName, mode = "setup") {
-  const clean = cleanText(String(desiredName || ""), 24).trim().replace(/\s+/g, " ");
+  const clean = safeCleanText(desiredName, 24).replace(/\s+/g, " ");
   if (!isValidUsername(clean)) return { ok: false, message: "Username must be 3-18 letters/numbers. Spaces and _ allowed." };
   const normalized = normalizeUsername(clean);
   const taken = usernameTakenBy(normalized, profile.profileId);
@@ -121,6 +127,7 @@ function getProfile(profileId, username = "") {
   return profiles[profileId];
 }
 function sanitizeProfile(p) {
+  if (!p || typeof p !== "object") p = makeDefaultProfile("guest-" + Math.random().toString(36).slice(2,10), "");
   p.owned = Array.isArray(p.owned) ? [...new Set([...DEFAULT_OWNED, ...p.owned])] : [...DEFAULT_OWNED];
   if (!ITEM_MAP.has(p.avatarId)) p.avatarId = COSMETICS.freeAvatarIds[0];
   if (!ITEM_MAP.has(p.bannerId)) p.bannerId = COSMETICS.freeBannerIds[0];
@@ -581,8 +588,8 @@ io.on("connection", (socket) => {
   });
 
   socket.on("createRoom", ({ username, avatarSeed, profileId, bannerId, decoId, roomName, type, settings }) => {
-    username = cleanText(username, 24);
-    roomName = cleanText(roomName, 50);
+    username = safeCleanText(username, 24);
+    roomName = safeCleanText(roomName, 50);
     if (!username) return socket.emit("errorMsg", "Bad/empty username not allowed.");
     if (!roomName) roomName = `${username}'s Drawing Room`;
     type = type === "Public Room" ? "Public Room" : "Private Room";
@@ -607,7 +614,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("joinRoom", ({ code, username, avatarSeed, profileId, bannerId, decoId }) => {
-    username = cleanText(username, 24);
+    username = safeCleanText(username, 24);
     if (!username) return socket.emit("errorMsg", "Bad/empty username not allowed.");
     code = String(code || "").toUpperCase().trim();
     const room = rooms.get(code);
@@ -648,7 +655,7 @@ io.on("connection", (socket) => {
   socket.on("updateSettings", ({ code, settings, name, type }) => {
     const room = rooms.get(code);
     if (!isHost(socket, room) || room.phase !== "lobby") return;
-    if (cleanText(name, 50)) room.name = cleanText(name, 50);
+    const cleanRoomName = safeCleanText(name, 50); if (cleanRoomName) room.name = cleanRoomName;
     if (type === "Public Room" || type === "Private Room") room.type = type;
     room.settings = {
       slots: Number(settings?.slots || room.settings.slots),
