@@ -42,10 +42,58 @@ const PROFILE_FILE = path.join(DATA_DIR, "profiles.json");
 let profiles = {};
 try { fs.mkdirSync(DATA_DIR, { recursive: true }); profiles = JSON.parse(fs.readFileSync(PROFILE_FILE, "utf8")); } catch (_) { profiles = {}; }
 function saveProfiles() { try { fs.writeFileSync(PROFILE_FILE, JSON.stringify(profiles, null, 2)); } catch (e) { console.error("Profile save failed", e.message); } }
+
+const USERNAME_CHANGE_COOLDOWN_MS = 15 * 24 * 60 * 60 * 1000;
+function normalizeUsername(name) {
+  return cleanText(String(name || ""), 24).trim().replace(/\s+/g, " ").toLowerCase();
+}
+function isValidUsername(name) {
+  const n = cleanText(String(name || ""), 24).trim();
+  // 3-18 chars, letters/numbers/space/underscore only, must contain at least one letter/number.
+  return n.length >= 3 && n.length <= 18 && /^[A-Za-z0-9_ ]+$/.test(n) && /[A-Za-z0-9]/.test(n);
+}
+function usernameTakenBy(normalized, profileId) {
+  normalized = normalizeUsername(normalized);
+  if (!normalized) return null;
+  for (const [pid, p] of Object.entries(profiles)) {
+    if (pid !== profileId && normalizeUsername(p.username) === normalized && p.setupComplete) return pid;
+  }
+  return null;
+}
+function usernameCooldownLeft(profile) {
+  if (!profile?.lastUsernameChangeAt) return 0;
+  return Math.max(0, USERNAME_CHANGE_COOLDOWN_MS - (Date.now() - Number(profile.lastUsernameChangeAt || 0)));
+}
+function setProfileUsername(profile, desiredName, mode = "setup") {
+  const clean = cleanText(String(desiredName || ""), 24).trim().replace(/\s+/g, " ");
+  if (!isValidUsername(clean)) return { ok: false, message: "Username must be 3-18 letters/numbers. Spaces and _ allowed." };
+  const normalized = normalizeUsername(clean);
+  const taken = usernameTakenBy(normalized, profile.profileId);
+  if (taken) return { ok: false, message: "Username already taken." };
+  if (normalizeUsername(profile.username) === normalized && profile.setupComplete) return { ok: true, profile };
+  if (mode === "change") {
+    const left = usernameCooldownLeft(profile);
+    if (left > 0) {
+      const days = Math.ceil(left / (24 * 60 * 60 * 1000));
+      return { ok: false, message: `You can change username after ${days} day${days === 1 ? "" : "s"}.` };
+    }
+  }
+  profile.username = clean;
+  profile.usernameNormalized = normalized;
+  if (!profile.usernameSetAt) profile.usernameSetAt = Date.now();
+  profile.lastUsernameChangeAt = Date.now();
+  profile.setupComplete = true;
+  return { ok: true, profile };
+}
+
 function makeDefaultProfile(profileId, username = "") {
   return {
     profileId,
-    username: cleanText(username, 24) || "Player",
+    username: cleanText(username, 24) || "",
+    usernameNormalized: username ? normalizeUsername(username) : "",
+    setupComplete: false,
+    usernameSetAt: 0,
+    lastUsernameChangeAt: 0,
     coins: 0,
     xp: 0,
     level: 1,
@@ -59,8 +107,16 @@ function makeDefaultProfile(profileId, username = "") {
 }
 function getProfile(profileId, username = "") {
   profileId = cleanText(profileId, 90) || nanoid(12);
-  if (!profiles[profileId]) { profiles[profileId] = makeDefaultProfile(profileId, username); saveProfiles(); }
-  if (username && cleanText(username, 24)) profiles[profileId].username = cleanText(username, 24);
+  if (!profiles[profileId]) {
+    profiles[profileId] = makeDefaultProfile(profileId, "");
+    if (username && isValidUsername(username) && !usernameTakenBy(normalizeUsername(username), profileId)) {
+      // Do not fully reserve names automatically from Google display name.
+      // Name reservation happens only after the first-time setup screen.
+      profiles[profileId].username = cleanText(username, 24).trim().replace(/\s+/g, " ");
+      profiles[profileId].usernameNormalized = normalizeUsername(username);
+    }
+    saveProfiles();
+  }
   return profiles[profileId];
 }
 function sanitizeProfile(p) {
@@ -70,6 +126,11 @@ function sanitizeProfile(p) {
   if (p.decoId && !ITEM_MAP.has(p.decoId)) p.decoId = "";
   p.matches = Math.max(0, Number(p.matches || 0));
   p.level = Math.max(1, Math.floor((p.xp || 0) / 250) + 1);
+  p.username = cleanText(p.username || "", 24).trim().replace(/\s+/g, " ");
+  p.usernameNormalized = normalizeUsername(p.username);
+  p.setupComplete = !!p.setupComplete || (!!p.username && p.username !== "Player" && !!p.usernameSetAt);
+  p.usernameSetAt = Number(p.usernameSetAt || (p.setupComplete ? Date.now() : 0));
+  p.lastUsernameChangeAt = Number(p.lastUsernameChangeAt || p.usernameSetAt || 0);
   return p;
 }
 function awardMatchRewards(room) {
@@ -366,7 +427,11 @@ function mergeCloudProfile(raw) {
   const profileId = cleanText(raw.profileId, 80);
   if (!profileId || !profileId.startsWith("fb_")) return null;
   const current = getProfile(profileId, raw.username || "");
-  current.username = cleanText(raw.username, 24) || current.username || "Player";
+  // Username is protected/reserved. Cloud sync cannot silently take or change a name.
+  if (!current.setupComplete && raw.setupComplete && raw.username) {
+    const set = setProfileUsername(current, raw.username, "setup");
+    if (!set.ok) current.username = "";
+  }
   current.coins = Math.max(0, Number(raw.coins || current.coins || 0));
   current.xp = Math.max(0, Number(raw.xp || current.xp || 0));
   current.wins = Math.max(0, Number(raw.wins || current.wins || 0));
@@ -398,6 +463,9 @@ function syncProfileToActivePlayer(sessionId, profile) {
   player.bannerId = profile.bannerId || player.bannerId;
   player.decoId = profile.decoId || "";
   player.level = profile.level || 1;
+  player.wins = profile.wins || 0;
+  player.matches = profile.matches || 0;
+  player.xp = profile.xp || 0;
   broadcastRoom(room);
 }
 
@@ -437,6 +505,30 @@ io.on("connection", (socket) => {
     socket.emit("profileData", profile);
   });
 
+  socket.on("profileSetup", ({ profileId, username, avatarId }) => {
+    const profile = sanitizeProfile(getProfile(profileId));
+    if (profile.setupComplete) return socket.emit("profileData", profile);
+    const result = setProfileUsername(profile, username, "setup");
+    if (!result.ok) return socket.emit("profileSetupError", result.message);
+    if (ITEM_MAP.has(avatarId) && profile.owned.includes(avatarId)) profile.avatarId = avatarId;
+    sanitizeProfile(profile);
+    saveProfiles();
+    syncProfileToActivePlayer(socket.data.sessionId, profile);
+    socket.emit("profileData", profile);
+    socket.emit("notice", "Username reserved successfully.");
+  });
+
+  socket.on("profileUsernameChange", ({ profileId, username }) => {
+    const profile = sanitizeProfile(getProfile(profileId));
+    const result = setProfileUsername(profile, username, "change");
+    if (!result.ok) return socket.emit("profileSetupError", result.message);
+    sanitizeProfile(profile);
+    saveProfiles();
+    syncProfileToActivePlayer(socket.data.sessionId, profile);
+    socket.emit("profileData", profile);
+    socket.emit("notice", "Username changed successfully.");
+  });
+
   socket.on("profileCloudSync", ({ profile }) => {
     const merged = mergeCloudProfile(profile);
     if (!merged) return socket.emit("shopError", "Cloud profile sync failed.");
@@ -449,9 +541,8 @@ io.on("connection", (socket) => {
     socket.emit("profileData", profile);
   });
 
-  socket.on("profileUpdate", ({ profileId, username }) => {
-    const profile = sanitizeProfile(getProfile(profileId, username));
-    if (username && cleanText(username, 24)) profile.username = cleanText(username, 24);
+  socket.on("profileUpdate", ({ profileId }) => {
+    const profile = sanitizeProfile(getProfile(profileId));
     saveProfiles();
     syncProfileToActivePlayer(socket.data.sessionId, profile);
     socket.emit("profileData", profile);
@@ -496,12 +587,15 @@ io.on("connection", (socket) => {
     const sessionId = socket.data.sessionId || nanoid(16);
     socket.data.sessionId = sessionId;
     room.hostSessionId = sessionId;
-    const prof = profileId ? sanitizeProfile(getProfile(profileId, username)) : null;
+    const prof = profileId ? sanitizeProfile(getProfile(profileId)) : null;
+    if (!prof || !prof.setupComplete || !prof.username) return socket.emit("errorMsg", "Complete username setup first.");
+    username = prof.username;
+    if (!roomName || roomName === "Player's Drawing Room") roomName = `${username}'s Drawing Room`;
     const owned = new Set(prof?.owned || []);
     avatarSeed = owned.has(avatarSeed) ? avatarSeed : (prof?.avatarId || COSMETICS.freeAvatarIds[0]);
     bannerId = owned.has(bannerId) ? bannerId : (prof?.bannerId || COSMETICS.freeBannerIds[0]);
     decoId = owned.has(decoId) ? decoId : (prof?.decoId || "");
-    room.players.push({ sessionId, profileId: prof?.profileId || "", username, avatarSeed: avatarSeed || COSMETICS.freeAvatarIds[0], bannerId, decoId, level: prof?.level || 1, score: 0, connected: true, lastActive: Date.now() });
+    room.players.push({ sessionId, profileId: prof?.profileId || "", username, avatarSeed: avatarSeed || COSMETICS.freeAvatarIds[0], bannerId, decoId, level: prof?.level || 1, wins: prof?.wins || 0, matches: prof?.matches || 0, xp: prof?.xp || 0, score: 0, connected: true, lastActive: Date.now() });
     rooms.set(room.code, room);
     sessions.set(sessionId, { socketId: socket.id, roomCode: room.code });
     socket.join(room.code);
@@ -520,13 +614,15 @@ io.on("connection", (socket) => {
     const sessionId = socket.data.sessionId || nanoid(16);
     socket.data.sessionId = sessionId;
     let player = room.players.find(p => p.sessionId === sessionId);
-    const prof = profileId ? sanitizeProfile(getProfile(profileId, username)) : null;
+    const prof = profileId ? sanitizeProfile(getProfile(profileId)) : null;
+    if (!prof || !prof.setupComplete || !prof.username) return socket.emit("errorMsg", "Complete username setup first.");
+    username = prof.username;
     const owned = new Set(prof?.owned || []);
     avatarSeed = owned.has(avatarSeed) ? avatarSeed : (prof?.avatarId || COSMETICS.freeAvatarIds[0]);
     bannerId = owned.has(bannerId) ? bannerId : (prof?.bannerId || COSMETICS.freeBannerIds[0]);
     decoId = owned.has(decoId) ? decoId : (prof?.decoId || "");
     if (!player) {
-      player = { sessionId, profileId: prof?.profileId || "", username, avatarSeed: avatarSeed || COSMETICS.freeAvatarIds[0], bannerId, decoId, level: prof?.level || 1, score: 0, connected: true, lastActive: Date.now() };
+      player = { sessionId, profileId: prof?.profileId || "", username, avatarSeed: avatarSeed || COSMETICS.freeAvatarIds[0], bannerId, decoId, level: prof?.level || 1, wins: prof?.wins || 0, matches: prof?.matches || 0, xp: prof?.xp || 0, score: 0, connected: true, lastActive: Date.now() };
       room.players.push(player);
     } else {
       player.connected = true;
@@ -536,6 +632,9 @@ io.on("connection", (socket) => {
       player.bannerId = bannerId || player.bannerId;
       player.decoId = decoId || player.decoId || "";
       player.level = prof?.level || player.level || 1;
+      player.wins = prof?.wins || player.wins || 0;
+      player.matches = prof?.matches || player.matches || 0;
+      player.xp = prof?.xp || player.xp || 0;
     }
     sessions.set(sessionId, { socketId: socket.id, roomCode: room.code });
     socket.join(room.code);
@@ -625,12 +724,17 @@ io.on("connection", (socket) => {
   socket.on("reportUnsafeDrawing", ({ code, targetSessionId }) => {
     const room = rooms.get(code);
     if (!room || !["vote", "roundResults", "results"].includes(room.phase)) return;
+    const reporter = room.players.find(p => p.sessionId === socket.id);
+    if (!reporter || !reporter.host) {
+      socket.emit("errorMsg", "Only the host can report images.");
+      return;
+    }
     const drawing = room.drawings.get(targetSessionId);
     if (!drawing) return;
     drawing.unsafe = true;
     drawing.unsafeReports = (drawing.unsafeReports || 0) + 1;
-    drawing.moderationReason = "Reported as adult/illegal by a player.";
-    socket.emit("notice", "Drawing reported and blurred for players.");
+    drawing.moderationReason = "Reported as adult/illegal by the host.";
+    socket.emit("notice", "Drawing reported. Other players now see a blurred version.");
     broadcastRoom(room);
   });
 

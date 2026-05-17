@@ -54,7 +54,7 @@
   <div class="credits-line">Dev: <b>Yusuf</b> • Studio: <b>BuddhuStudio</b> • Version: <b>v1.0.0</b></div>
   <h2>DrawBattle</h2>
   <p class="home-desc">Create a room, invite friends, draw random objects, vote secretly, and climb the scoreboard.</p>
-  <button onclick="go('avatar')" class="big-button">▶ Start Game</button>
+  <button onclick="startGameFlow()" class="big-button">▶ Start Game</button>
  </div>
 
 </section>
@@ -80,6 +80,15 @@
      <div class="setting-box"><small>Owned Items</small><b id="profileOwned">0</b></div>
     </div>
     <div class="field"><b>Equipped</b><div id="equippedLine" class="small"></div></div>
+    <div class="field username-change-box">
+      <b>Username</b>
+      <p class="small">Username is unique. After changing, you can change again only after 15 days.</p>
+      <div class="username-change-row">
+        <input id="profileUsernameInput" placeholder="Your username"/>
+        <button id="profileUsernameBtn" onclick="changeProfileUsername()">Change Username</button>
+      </div>
+      <div id="profileUsernameHelp" class="small"></div>
+    </div>
    </div>
   </div>
   <div class="card">
@@ -113,12 +122,13 @@
 <section id="avatar" class="screen" style="display:none">
  <div class="card">
   <button class="back-btn" onclick="goBack()">← Back</button>
-  <span class="pill">Step 1 / 2</span>
-  <h2>Choose username & avatar</h2>
-  <p><b>Enter your name and pick your avatar before joining a room.</b></p>
+  <span class="pill">First-time setup</span>
+  <h2>Reserve username & choose avatar</h2>
+  <p><b>This page appears only once. Your username becomes unique, and nobody else can use the same name.</b></p>
   <input id="username" value="" placeholder="Example: Yusuf"/>
+  <div class="small">After setup, name change is available from Profile only once every 15 days.</div><br>
   <div id="avatarGrid" class="avatar-grid"></div>
-  <button onclick="validateProfileAndGoRooms()" class="full">Continue</button>
+  <button onclick="validateProfileAndGoRooms()" class="full">Save Profile & Continue</button>
  </div>
 </section>
 

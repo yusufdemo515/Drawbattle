@@ -37,6 +37,7 @@ let sfxCooldowns = {};
 let localTimerId = null;
 let rewardNoticeKey = "";
 const hostRevealedUnsafe = new Set();
+let pendingInitialSetupGoRooms = false;
 
 const COS = window.COSMETICS || {avatars:[],banners:[],decorations:[],freeAvatarIds:[],freeBannerIds:[]};
 const allCosmetics = () => [...COS.avatars, ...COS.banners, ...COS.decorations];
@@ -70,6 +71,10 @@ function defaultProfile(){
  return {
   profileId: profileId || ("P-" + Math.random().toString(36).slice(2,10).toUpperCase()),
   username: localStorage.getItem("drawbattleUsername") || "",
+  usernameNormalized: "",
+  setupComplete: localStorage.getItem("drawbattleSetupComplete") === "1",
+  usernameSetAt: Number(localStorage.getItem("drawbattleUsernameSetAt") || 0),
+  lastUsernameChangeAt: Number(localStorage.getItem("drawbattleLastUsernameChangeAt") || 0),
   coins: 0, xp: 0, level: 1, wins: 0,
   owned: [...COS.freeAvatarIds, ...COS.freeBannerIds],
   avatarId: selectedSeed,
@@ -90,11 +95,11 @@ async function handleFirebaseAuthChanged(user){
   const cloudProfile = await window.drawBattleFirebase.ensureCloudProfile(user, local);
   profileId = cloudProfile.profileId;
   localStorage.setItem("drawbattleProfileId", profileId);
-  localStorage.setItem("drawbattleUsername", cloudProfile.username || user.displayName || "Player");
+  if(cloudProfile.username) localStorage.setItem("drawbattleUsername", cloudProfile.username);
   userProfile = cloudProfile;
   selectedSeed = cloudProfile.avatarId || selectedSeed;
   localStorage.setItem("drawbattleSeed", selectedSeed);
-  if(username && !username.value) username.value = cloudProfile.username || user.displayName || "";
+  if(username && !username.value && cloudProfile.username) username.value = cloudProfile.username;
   socket.emit("profileCloudSync", { profile: cloudProfile });
   socket.emit("profileLogin", { profileId, username: cloudProfile.username || user.displayName || "" });
   renderAvatars(); renderProfilePage(); renderShop();
@@ -114,7 +119,15 @@ async function handleServerProfileData(profile){
  selectedSeed = profile.avatarId || selectedSeed;
  localStorage.setItem("drawbattleSeed", selectedSeed);
  if(profile.username) localStorage.setItem("drawbattleUsername", profile.username);
+ if(profile.setupComplete) localStorage.setItem("drawbattleSetupComplete","1"); else localStorage.removeItem("drawbattleSetupComplete");
+ if(profile.usernameSetAt) localStorage.setItem("drawbattleUsernameSetAt", String(profile.usernameSetAt));
+ if(profile.lastUsernameChangeAt) localStorage.setItem("drawbattleLastUsernameChangeAt", String(profile.lastUsernameChangeAt));
+ if(username && !profile.setupComplete) username.value = "";
  renderAvatars(); renderProfilePage(); renderShop();
+ if(pendingInitialSetupGoRooms && profile.setupComplete){
+  pendingInitialSetupGoRooms = false;
+  go("rooms");
+ }
  try{
   if(window.drawBattleFirebase?.user && profile.profileId === "fb_" + window.drawBattleFirebase.user.uid){
     await window.drawBattleFirebase.saveProfile(profile);
@@ -138,6 +151,7 @@ socket.on("session", ({ sessionId: sid }) => {
 });
 socket.on("profileData", (profile) => handleServerProfileData(profile));
 socket.on("shopError", msg => showToast("❌ " + msg));
+socket.on("profileSetupError", msg => { pendingInitialSetupGoRooms = false; showToast("❌ " + msg); });
 socket.on("publicRooms", renderPublicRooms);
 socket.on("joinedRoom", ({ code }) => {
   currentRoomCode = code;
@@ -172,9 +186,12 @@ socket.on("leftRoom", () => {
 // Private canvas: no live remote drawing strokes are displayed.
 socket.on("reaction", ({ targetSessionId, reaction }) => showReaction(targetSessionId, reaction));
 
+function profileReady(){ const p=userProfile || defaultProfile(); return !!(p.setupComplete && p.username); }
+function startGameFlow(){ if(profileReady()) go("rooms"); else go("avatar"); }
 function go(id, pushHistory = true) {
   if (currentScreen === "intro" && id !== "intro") stopSpinSfx();
-  if (id === "rooms" && !validateProfile()) return;
+  if ((id === "rooms" || id === "create") && !validateProfile()) return;
+  if (id === "avatar" && profileReady()) { go("rooms", pushHistory); return; }
   if (pushHistory && id !== currentScreen) {
     screenHistory.push(currentScreen);
     if (screenHistory.length > 25) screenHistory.shift();
@@ -208,7 +225,7 @@ function goBack() {
 
   let previous = screenHistory.pop() || "home";
   if (currentScreen === "create") previous = "rooms";
-  if (currentScreen === "rooms") previous = "avatar";
+  if (currentScreen === "rooms") previous = profileReady() ? "home" : "avatar";
   if (currentScreen === "avatar") previous = "home";
   go(previous, false);
 }
@@ -376,13 +393,27 @@ function selectAvatar(seed){
 }
 
 function validateProfile(){
- const u = username.value.trim();
- if(!u){ showToast("❌ Username required."); return false; }
- localStorage.setItem("drawbattleUsername", u);
- if(userProfile){ userProfile.username = u; socket.emit("profileUpdate", { profileId:userProfile.profileId, username:u }); }
+ const p = userProfile || defaultProfile();
+ if(!p.profileId){
+  showToast("❌ Profile loading. Try again.");
+  return false;
+ }
+ if(!p.setupComplete || !p.username){
+  showToast("❌ Set your username first.");
+  go("avatar");
+  return false;
+ }
  return true;
 }
-function validateProfileAndGoRooms(){ if(validateProfile()) go("rooms"); }
+function completeInitialSetup(){
+ const p = userProfile || defaultProfile();
+ const u = username.value.trim();
+ if(!u){ showToast("❌ Username required."); return; }
+ selectedSeed = selectedSeed || p.avatarId || COS.freeAvatarIds?.[0] || "free_purple_glasses";
+ pendingInitialSetupGoRooms = true;
+ socket.emit("profileSetup", { profileId: p.profileId, username: u, avatarId: selectedSeed });
+}
+function validateProfileAndGoRooms(){ completeInitialSetup(); }
 function validateRoomName(silent=true){
  const name=roomName.value.trim();
  if(!name) return true;
@@ -392,13 +423,14 @@ function validateRoomName(silent=true){
 function setMode(m){gameMode=m;modePick.textContent="Selected: "+m}
 function createRoom(){
  if(!validateProfile()) return;
- const name = roomName.value.trim() || `${username.value.trim()}'s Drawing Room`;
+ const p = userProfile || defaultProfile();
+ const name = roomName.value.trim() || `${p.username}'s Drawing Room`;
  socket.emit("createRoom", {
-  username: username.value.trim(),
-  avatarSeed: selectedSeed,
-  profileId: userProfile?.profileId || profileId,
-  bannerId: userProfile?.bannerId || "banner_free_pink",
-  decoId: userProfile?.decoId || "",
+  username: p.username,
+  avatarSeed: p.avatarId || selectedSeed,
+  profileId: p.profileId || profileId,
+  bannerId: p.bannerId || "banner_free_pink",
+  decoId: p.decoId || "",
   roomName: name,
   type: roomType.value,
   settings: { slots: slots.value, timer: timer.value, rounds: rounds.value, mode: gameMode }
@@ -406,7 +438,8 @@ function createRoom(){
 }
 function joinRoomByCode(){
  if(!validateProfile()) return;
- socket.emit("joinRoom", { code: joinCode.value.trim(), username: username.value.trim(), avatarSeed: selectedSeed, profileId: userProfile?.profileId || profileId, bannerId: userProfile?.bannerId || "banner_free_pink", decoId: userProfile?.decoId || "" });
+ const p = userProfile || defaultProfile();
+ socket.emit("joinRoom", { code: joinCode.value.trim(), username: p.username, avatarSeed: p.avatarId || selectedSeed, profileId: p.profileId || profileId, bannerId: p.bannerId || "banner_free_pink", decoId: p.decoId || "" });
 }
 function copyInvite(){
  navigator.clipboard?.writeText(currentRoomCode);
@@ -597,7 +630,7 @@ function renderVoteCards(){
   const hostCanSee = host && hostRevealedUnsafe.has(d.sessionId);
   const blurClass = isUnsafe && !hostCanSee ? " unsafe-blurred" : "";
   const showBtn = isUnsafe && host ? `<button class="zoom-btn show-unsafe-btn" onclick="toggleUnsafeReveal('${d.sessionId}')">${hostCanSee?'Hide':'Show me'}</button>` : "";
-  const reportBtn = d.sessionId!==sessionId ? `<button class="reaction-btn" onclick="reportUnsafeDrawing('${d.sessionId}')">🚩 Report image</button>` : "";
+  const reportBtn = host && d.sessionId!==sessionId ? `<button class="reaction-btn" onclick="reportUnsafeDrawing('${d.sessionId}')">🚩 Report image</button>` : "";
   const accuracy = d.accuracyScore ? `<small class="accuracy-chip">Detector +${d.accuracyScore} pts</small>` : "";
   return `<div class="vote-card" data-session="${d.sessionId}"><div class="drawing-preview${blurClass}"><button class="zoom-btn" onclick="openZoom('${d.username}',${start+i+1},'${img}')">🔍 Zoom</button>${showBtn}<img src="${img}">${isUnsafe && !hostCanSee?`<div class="unsafe-cover"><b>Blurred safety image</b><small>Adult/illegal report</small></div>`:""}</div><div class="player-row" style="box-shadow:none;border:0">${decoratedAvatarHtml(d.avatarSeed,d.decoId)}<div><b>${d.username}</b><br><small>${d.afk?'AFK auto-skip':'Votes hidden'}</small><br>${accuracy}</div></div><div class="reaction-row">${reactions.map(r=>`<button class="reaction-btn" onclick="sendReaction(this,'${d.sessionId}','${r.replace(/'/g,"")}')">${r}</button>`).join("")}${reportBtn}</div><button style="width:100%;margin-top:10px" ${d.sessionId===sessionId?'disabled':''} onclick="castVote('${d.sessionId}',this)">${votedFor===d.sessionId?'VOTED':'VOTE'}</button></div>`;
  }).join("");
@@ -606,8 +639,8 @@ function renderVoteCards(){
  finishVoteBtn.style.display = isMeHost() ? "" : "none";
  finishVoteBtn.textContent = "Finish Voting Early";
 }
-function toggleUnsafeReveal(id){ if(hostRevealedUnsafe.has(id)) hostRevealedUnsafe.delete(id); else hostRevealedUnsafe.add(id); renderVoteCards(); }
-function reportUnsafeDrawing(id){ socket.emit("reportUnsafeDrawing", { code: currentRoomCode, targetSessionId: id }); }
+function toggleUnsafeReveal(id){ if(!isMeHost()) return; if(hostRevealedUnsafe.has(id)) hostRevealedUnsafe.delete(id); else hostRevealedUnsafe.add(id); renderVoteCards(); }
+function reportUnsafeDrawing(id){ if(!isMeHost()){ showToast('Only host can report images.'); return; } socket.emit("reportUnsafeDrawing", { code: currentRoomCode, targetSessionId: id }); showToast('Image reported. Blurred for non-host players.'); }
 function makeBlankDrawing(name){
  const c=document.createElement("canvas");c.width=900;c.height=604;const ctx=c.getContext("2d");ctx.fillStyle="#fff";ctx.fillRect(0,0,c.width,c.height);ctx.fillStyle="#cbd5e1";ctx.font="bold 46px Trebuchet MS";ctx.fillText("AFK / Blank",320,280);ctx.font="bold 30px Trebuchet MS";ctx.fillText(name,380,340);return c.toDataURL("image/png");
 }
@@ -712,6 +745,27 @@ function renderProfilePage(){
  if(profileDeco){ if(de){ profileDeco.src=de.url; profileDeco.style.display="block"; } else profileDeco.style.display="none"; }
  if(profileBanner){ profileBanner.style.background = bannerCss(p.bannerId); profileBanner.style.backgroundSize="cover"; profileBanner.style.backgroundPosition="center"; }
  if(equippedLine) equippedLine.textContent = `Avatar: ${av?.name||"Free"} • Banner: ${bn?.name||"Plain Pink"} • Decoration: ${de?.name||"None"}`;
+ if(profileUsernameInput) profileUsernameInput.value = p.username || "";
+ if(profileUsernameHelp){
+  const left = usernameChangeLeftDays(p);
+  profileUsernameHelp.textContent = !p.setupComplete ? "Set username first from Start Game." : left > 0 ? `You can change name after ${left} day${left===1?"":"s"}.` : "You can change your username now.";
+ }
+ if(profileUsernameBtn){
+  profileUsernameBtn.disabled = !p.setupComplete || usernameChangeLeftDays(p) > 0;
+  profileUsernameBtn.textContent = usernameChangeLeftDays(p) > 0 ? "Locked" : "Change Username";
+ }
+}
+function usernameChangeLeftDays(p){
+ const last = Number(p?.lastUsernameChangeAt || 0);
+ if(!last) return 0;
+ const left = (15*24*60*60*1000) - (Date.now() - last);
+ return Math.max(0, Math.ceil(left/(24*60*60*1000)));
+}
+function changeProfileUsername(){
+ const p = userProfile || defaultProfile();
+ const u = profileUsernameInput?.value?.trim();
+ if(!u){ showToast("❌ Username required."); return; }
+ socket.emit("profileUsernameChange", { profileId: p.profileId, username: u });
 }
 function setShopTab(tab, btn){ shopTab=tab; document.querySelectorAll('.shop-tab').forEach(b=>b.classList.remove('active')); if(btn)btn.classList.add('active'); renderShop(); }
 function renderShop(){
