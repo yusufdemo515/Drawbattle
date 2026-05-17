@@ -475,7 +475,7 @@ function applyRoomState(){
 function renderPublicRooms(rooms){
  if(!publicRooms) return;
  if(!rooms.length){ publicRooms.innerHTML = `<div class="field"><b>No public rooms yet.</b></div>`; return; }
- publicRooms.innerHTML = rooms.map(r => `<div class="room-row"><div class="safe-wrap"><b>${r.name}</b><br><small>${r.players}/${r.slots} players • ${r.mode} • ${r.phase}</small></div><button onclick="joinPublic('${r.code}')">Join</button></div>`).join("");
+ publicRooms.innerHTML = rooms.map(r => `<div class="room-row"><div class="safe-wrap"><b>${r.name}</b><br><small>${r.players}/${r.slots} players • ${r.roomMode || "Classic"} • ${r.mode} • ${r.phase}</small></div><button onclick="joinPublic('${r.code}')">Join</button></div>`).join("");
 }
 function joinPublic(code){ joinCode.value = code; joinRoomByCode(); }
 
@@ -542,8 +542,11 @@ function renderDraw(){
  go("draw", false);
  roundNow.textContent = roomState.round;
  drawRounds.textContent = roomState.totalRounds;
+ const mode = roomState.settings?.roomMode || "Classic";
  promptBox.textContent = "✏️ " + roomState.currentPrompt.toUpperCase();
+ if(drawModeBadge) drawModeBadge.textContent = mode;
  setupCanvas();
+ applyRoomModeTools(mode);
  startLocalTimer(drawTimer, () => {});
  renderChatList(roomState.chat || []);
 }
@@ -552,9 +555,35 @@ function startLocalTimer(el, done){
  const tick=()=>{ 
   const left=Math.max(0, roomState.timerEndsAt-Date.now());
   el.textContent = `${String(Math.floor(left/60000)).padStart(2,"0")}:${String(Math.floor((left%60000)/1000)).padStart(2,"0")}`;
-  if(left<=0){clearInterval(localTimerId); done&&done();}
+  if(currentScreen==="draw" && roomState?.settings?.roomMode==="Blind Draw"){
+    document.body.classList.toggle("blind-draw-active", left <= 10000 && left > 0);
+  } else document.body.classList.remove("blind-draw-active");
+  if(left<=0){clearInterval(localTimerId); document.body.classList.remove("blind-draw-active"); done&&done();}
  };
  tick(); localTimerId=setInterval(tick,500);
+}
+
+
+function applyRoomModeTools(mode){
+ document.body.classList.toggle("mobile-canvas-focus", false);
+ if(noEraserNote) noEraserNote.style.display = (mode === "No Eraser") ? "block" : "none";
+ if(blindNote) blindNote.style.display = (mode === "Blind Draw") ? "block" : "none";
+ if(eraserBtn) eraserBtn.disabled = mode === "No Eraser";
+ if(mode === "One Color"){
+   if(!oneColorLocked){
+     const cs=["#111827","#ef4444","#f97316","#eab308","#22c55e","#06b6d4","#3b82f6","#8b5cf6","#ec4899"];
+     oneColorLocked = cs[Math.floor(Math.random()*cs.length)];
+   }
+   color = oneColorLocked;
+   renderColors();
+   if(oneColorNote) { oneColorNote.style.display="block"; oneColorNote.textContent="One Color Mode: locked color"; }
+ } else {
+   oneColorLocked = "";
+   if(oneColorNote) oneColorNote.style.display="none";
+ }
+}
+function toggleCanvasFullscreen(){
+ document.body.classList.toggle("mobile-canvas-focus");
 }
 
 function setupCanvas(){
@@ -598,8 +627,12 @@ function restore(data){const img=new Image();img.onload=()=>{const ctx=drawCanva
 function undo(){if(undoStack.length>1){redoStack.push(undoStack.pop());restore(undoStack[undoStack.length-1])}}
 function redo(){if(redoStack.length){const d=redoStack.pop();undoStack.push(d);restore(d)}}
 function clearCanvas(save=true){playSfx('erase');const ctx=drawCanvas.getContext("2d");ctx.globalCompositeOperation="source-over";ctx.fillStyle="#fff";ctx.fillRect(0,0,drawCanvas.width,drawCanvas.height);if(save)saveState()}
-function setTool(t){tool=t;document.querySelectorAll('.tool').forEach(b=>b.classList.remove('tool-selected','active')); if(toolSelect){ if(['pencil','pen','sketch','marker'].includes(t)){toolSelect.value=t;toolSelect.classList.add('selected')} else toolSelect.classList.remove('selected'); } if(t==='eraser') eraserBtn.classList.add('tool-selected'); if(t==='bucket') bucketBtn.classList.add('tool-selected');}
-function renderColors(){const cs=["#111827","#ef4444","#f97316","#eab308","#22c55e","#06b6d4","#3b82f6","#8b5cf6","#ec4899","#ffffff","#78350f","#94a3b8"];colors.innerHTML=cs.map(c=>`<span class="color ${c===color?'active':''}" style="background:${c}" onclick="color='${c}';renderColors()"></span>`).join("")}
+function setTool(t){ if(roomState?.settings?.roomMode==="No Eraser" && t==="eraser"){showToast("No Eraser Mode enabled.");return;} tool=t;document.querySelectorAll('.tool').forEach(b=>b.classList.remove('tool-selected','active')); if(toolSelect){ if(['pencil','pen','sketch','marker'].includes(t)){toolSelect.value=t;toolSelect.classList.add('selected')} else toolSelect.classList.remove('selected'); } if(t==='eraser') eraserBtn.classList.add('tool-selected'); if(t==='bucket') bucketBtn.classList.add('tool-selected');}
+function renderColors(){
+ let cs=["#111827","#ef4444","#f97316","#eab308","#22c55e","#06b6d4","#3b82f6","#8b5cf6","#ec4899","#ffffff","#78350f","#94a3b8"];
+ if(roomState?.settings?.roomMode==="One Color" && oneColorLocked) cs=[oneColorLocked];
+ colors.innerHTML=cs.map(c=>`<span class="color ${c===color?'active':''}" style="background:${c}" onclick="${roomState?.settings?.roomMode==='One Color'?'showToast(\'One Color Mode locked.\')':`color='${c}';renderColors()`}"></span>`).join("");
+}
 function submitDrawing(){ playSfx("submit"); socket.emit("submitDrawing", { code: currentRoomCode, image: drawCanvas.toDataURL("image/png") }); showToast("Drawing submitted."); }
 
 function hexToRgba(hex){hex=hex.replace("#","");if(hex.length===3)hex=hex.split("").map(c=>c+c).join("");return[parseInt(hex.slice(0,2),16),parseInt(hex.slice(2,4),16),parseInt(hex.slice(4,6),16),255]}
@@ -666,8 +699,8 @@ function renderResults(){
  const ranking=[...roomState.players].sort((a,b)=>b.score-a.score);
  winnerTitle.textContent=funTitles[Math.floor(Math.random()*funTitles.length)];
  podium.innerHTML=[["2",ranking[1],"height:150px;background:#e5e7eb"],["1",ranking[0],"height:210px;background:var(--accent)"],["3",ranking[2],"height:120px;background:#e5e7eb"]].filter(x=>x[1]).map(p=>`<div>${decoratedAvatarHtml(p[1].avatarSeed,p[1].decoId)}<h3 class="safe">${p[1].username}</h3><b>${p[1].score} pts</b><div class="bar" style="${p[2]}">#${p[0]}</div></div>`).join("");
- const shuffled=[...ranking].sort(()=>Math.random()-.5);
- mvpCards.innerHTML=[["Most Funny Drawing 😂",shuffled[0]],["Most Cursed Art 👻",shuffled[1]||shuffled[0]],["Most Confusing 🌀",shuffled[2]||shuffled[0]]].map(m=>`<div class="mvp-card"><h3>${m[0]}</h3>${decoratedAvatarHtml(m[1].avatarSeed,m[1].decoId)}<div><b>${m[1].username}</b></div></div>`).join("");
+ const resultTitles=["Sketch King 👑","Chaos Artist 😂","Bro Tried Award 😭","Most Confusing Drawing 🌀","Cleanest Artist ✨","Speed Scribbler ⚡","No Eraser Survivor 💀","One Color Legend 🎨"];
+ mvpCards.innerHTML=ranking.map((p,i)=>`<div class="mvp-card"><h3>${resultTitles[i%resultTitles.length]}</h3>${decoratedAvatarHtml(p.avatarSeed,p.decoId)}<div><b>${p.username}</b></div><small>${p.score} pts</small></div>`).join("");
  finalList.innerHTML=ranking.map((p,i)=>`<div class="player-row clickable-player" onclick="openPublicProfile('${p.sessionId}')">${decoratedAvatarHtml(p.avatarSeed,p.decoId)}<b>#${i+1} ${p.username}</b><span style="margin-left:auto;font-weight:1000">${p.score} pts</span></div>`).join("");
  if(roomState.rewards && roomState.rewards[sessionId]){
   const r = roomState.rewards[sessionId];
@@ -730,6 +763,28 @@ function openPublicProfile(targetSessionId){
 }
 function closePublicProfile(){ if(publicProfileModal) publicProfileModal.classList.remove("active"); }
 
+
+function refreshFriends(){ const p=userProfile||defaultProfile(); if(p.profileId) socket.emit("getFriends",{profileId:p.profileId}); }
+function claimDailyReward(){ const p=userProfile||defaultProfile(); socket.emit("claimDaily",{profileId:p.profileId}); }
+function sendFriendRequestUi(){
+ const p=userProfile||defaultProfile();
+ const u=friendUsernameInput?.value?.trim();
+ if(!u){showToast("Enter username.");return;}
+ socket.emit("sendFriendRequest",{profileId:p.profileId, username:u});
+}
+function acceptFriend(id){ const p=userProfile||defaultProfile(); socket.emit("respondFriendRequest",{profileId:p.profileId, fromProfileId:id, accept:true}); }
+function declineFriend(id){ const p=userProfile||defaultProfile(); socket.emit("respondFriendRequest",{profileId:p.profileId, fromProfileId:id, accept:false}); }
+function removeFriend(id){ const p=userProfile||defaultProfile(); socket.emit("removeFriend",{profileId:p.profileId, friendProfileId:id}); }
+function renderFriendsPanel(){
+ if(!friendsList) return;
+ const req = (friendsState.requestsIn||[]).map(f=>`<div class="friend-card">${decoratedAvatarHtml(f.avatarId,f.decoId)}<div><b>${f.username}</b><br><small>Lv.${f.level} wants to be friends</small></div><div class="friend-actions"><button onclick="acceptFriend('${f.profileId}')">Accept</button><button class="report-btn" onclick="declineFriend('${f.profileId}')">Decline</button></div></div>`).join("");
+ const friends = (friendsState.friends||[]).map(f=>`<div class="friend-card">${decoratedAvatarHtml(f.avatarId,f.decoId)}<div><b>${f.username}</b><br><small>Lv.${f.level} • ${f.wins} wins</small></div><div class="friend-actions"><button onclick="inviteFriend('${f.profileId}')">Invite</button><button onclick="joinFriendPublic('${f.profileId}')">Join</button></div></div>`).join("");
+ const out = (friendsState.requestsOut||[]).map(f=>`<span class="pill">Pending: ${f.username}</span>`).join(" ");
+ friendsList.innerHTML = `${req?`<h3>Requests</h3>${req}`:""}<h3>Friends</h3>${friends || '<div class="field"><b>No friends yet.</b></div>'}${out?`<h3>Pending</h3>${out}`:""}`;
+}
+function inviteFriend(id){ if(!currentRoomCode){showToast("Create/join a room first.");return;} navigator.clipboard?.writeText(`${location.origin} • Room ${currentRoomCode}`); showToast("Invite copied for friend."); }
+function joinFriendPublic(id){ showToast("Friend public-room join works from Public Rooms list for now."); go("rooms"); }
+
 function renderProfilePage(){
  const p = userProfile || defaultProfile();
  if(username && !username.value && p.username) username.value = p.username;
@@ -745,6 +800,9 @@ function renderProfilePage(){
  if(profileDeco){ if(de){ profileDeco.src=de.url; profileDeco.style.display="block"; } else profileDeco.style.display="none"; }
  if(profileBanner){ profileBanner.style.background = bannerCss(p.bannerId); profileBanner.style.backgroundSize="cover"; profileBanner.style.backgroundPosition="center"; }
  if(equippedLine) equippedLine.textContent = `Avatar: ${av?.name||"Free"} • Banner: ${bn?.name||"Plain Pink"} • Decoration: ${de?.name||"None"}`;
+ if(profileBadges) profileBadges.innerHTML = (p.badges||[]).map(b=>`<span class="pill badge-pill">${b}</span>`).join(" ") || '<span class="small">No badges yet.</span>';
+ if(dailyRewardInfo) dailyRewardInfo.textContent = `Daily streak: ${p.daily?.streak || 0}`;
+
  if(profileUsernameInput) profileUsernameInput.value = p.username || "";
  if(profileUsernameHelp){
   const left = usernameChangeLeftDays(p);
@@ -754,6 +812,7 @@ function renderProfilePage(){
   profileUsernameBtn.disabled = !p.setupComplete || usernameChangeLeftDays(p) > 0;
   profileUsernameBtn.textContent = usernameChangeLeftDays(p) > 0 ? "Locked" : "Change Username";
  }
+ if(currentScreen === "profile") refreshFriends();
 }
 function usernameChangeLeftDays(p){
  const last = Number(p?.lastUsernameChangeAt || 0);
@@ -761,11 +820,14 @@ function usernameChangeLeftDays(p){
  const left = (15*24*60*60*1000) - (Date.now() - last);
  return Math.max(0, Math.ceil(left/(24*60*60*1000)));
 }
+function openUsernameModal(){ renderProfilePage(); usernameModal.classList.add("active"); }
+function closeUsernameModal(){ usernameModal.classList.remove("active"); }
 function changeProfileUsername(){
  const p = userProfile || defaultProfile();
  const u = profileUsernameInput?.value?.trim();
  if(!u){ showToast("❌ Username required."); return; }
  socket.emit("profileUsernameChange", { profileId: p.profileId, username: u });
+ closeUsernameModal();
 }
 function setShopTab(tab, btn){ shopTab=tab; document.querySelectorAll('.shop-tab').forEach(b=>b.classList.remove('active')); if(btn)btn.classList.add('active'); renderShop(); }
 function renderShop(){

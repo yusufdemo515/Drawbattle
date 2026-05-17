@@ -651,7 +651,8 @@ io.on("connection", (socket) => {
       slots: Number(settings?.slots || room.settings.slots),
       timer: Number(settings?.timer || room.settings.timer),
       rounds: Number(settings?.rounds || room.settings.rounds),
-      mode: ["Normal","Medium","Hard"].includes(settings?.mode) ? settings.mode : room.settings.mode
+      mode: ["Normal","Medium","Hard"].includes(settings?.mode) ? settings.mode : room.settings.mode,
+      roomMode: ["Classic","Speed","Blind Draw","No Eraser","One Color","Hard Prompt"].includes(settings?.roomMode) ? settings.roomMode : (room.settings.roomMode || "Classic")
     };
     broadcastRoom(room);
   });
@@ -737,6 +738,80 @@ io.on("connection", (socket) => {
     socket.emit("notice", "Drawing reported. Other players now see a blurred version.");
     broadcastRoom(room);
   });
+
+
+  socket.on("claimDaily", ({ profileId }) => {
+    const profile = sanitizeProfile(getProfile(profileId));
+    const now = Date.now();
+    if (profile.daily.lastClaim && isSameDay(profile.daily.lastClaim, now)) {
+      socket.emit("shopError", "Daily reward already claimed today.");
+      return;
+    }
+    const yesterday = now - 24 * 60 * 60 * 1000;
+    profile.daily.streak = profile.daily.lastClaim && isSameDay(profile.daily.lastClaim, yesterday) ? (profile.daily.streak || 0) + 1 : 1;
+    profile.daily.lastClaim = now;
+    const coins = profile.daily.streak >= 7 ? 25 : 10 + Math.min(profile.daily.streak - 1, 4) * 5;
+    const xp = 25 + Math.min(profile.daily.streak, 7) * 5;
+    profile.coins = (profile.coins || 0) + coins;
+    profile.xp = (profile.xp || 0) + xp;
+    updateBadges(profile);
+    sanitizeProfile(profile);
+    saveProfiles();
+    socket.emit("profileData", profile);
+    socket.emit("notice", `Daily reward claimed: +${coins} coins, +${xp} XP`);
+  });
+
+  socket.on("getFriends", ({ profileId }) => {
+    const profile = sanitizeProfile(getProfile(profileId));
+    emitFriends(socket, profile);
+  });
+
+  socket.on("sendFriendRequest", ({ profileId, username }) => {
+    const from = sanitizeProfile(getProfile(profileId));
+    const to = findProfileByUsername(username);
+    if (!to) return socket.emit("shopError", "User not found.");
+    if (to.profileId === from.profileId) return socket.emit("shopError", "You cannot add yourself.");
+    if (from.friends.includes(to.profileId)) return socket.emit("shopError", "Already friends.");
+    if (!from.friendRequestsOut.includes(to.profileId)) from.friendRequestsOut.push(to.profileId);
+    if (!to.friendRequestsIn.includes(from.profileId)) to.friendRequestsIn.push(from.profileId);
+    saveProfiles();
+    emitFriends(socket, from);
+    socket.emit("notice", "Friend request sent.");
+  });
+
+  socket.on("respondFriendRequest", ({ profileId, fromProfileId, accept }) => {
+    const me = sanitizeProfile(getProfile(profileId));
+    const other = profiles[fromProfileId] ? sanitizeProfile(profiles[fromProfileId]) : null;
+    if (!other) return socket.emit("shopError", "Request user not found.");
+    me.friendRequestsIn = me.friendRequestsIn.filter(id => id !== other.profileId);
+    other.friendRequestsOut = other.friendRequestsOut.filter(id => id !== me.profileId);
+    if (accept) {
+      if (!me.friends.includes(other.profileId)) me.friends.push(other.profileId);
+      if (!other.friends.includes(me.profileId)) other.friends.push(me.profileId);
+    }
+    saveProfiles();
+    emitFriends(socket, me);
+    socket.emit("notice", accept ? "Friend added." : "Friend request declined.");
+  });
+
+  socket.on("removeFriend", ({ profileId, friendProfileId }) => {
+    const me = sanitizeProfile(getProfile(profileId));
+    const other = profiles[friendProfileId] ? sanitizeProfile(profiles[friendProfileId]) : null;
+    me.friends = me.friends.filter(id => id !== friendProfileId);
+    if (other) other.friends = other.friends.filter(id => id !== me.profileId);
+    saveProfiles();
+    emitFriends(socket, me);
+    socket.emit("notice", "Friend removed.");
+  });
+
+  socket.on("lobbyEmote", ({ code, emote }) => {
+    const room = rooms.get(code);
+    if (!room || !room.players.some(p => p.sessionId === socket.data.sessionId)) return;
+    emote = cleanText(emote, 4);
+    if (!["😂","🔥","💀","😭","👀"].includes(emote)) return;
+    io.to(room.code).emit("lobbyEmote", { sessionId: socket.data.sessionId, emote });
+  });
+
 
   socket.on("reaction", ({ code, targetSessionId, reaction }) => {
     const room = rooms.get(code);

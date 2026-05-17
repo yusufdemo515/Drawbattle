@@ -400,3 +400,28 @@ input[type="range"]::-moz-range-thumb{width:28px;height:28px;border-radius:50%;b
 .username-change-row input{min-width:0}
 .username-change-row button:disabled{opacity:.55;filter:grayscale(.3);cursor:not-allowed;transform:none}
 @media(max-width:700px){.username-change-row{grid-template-columns:1fr}.username-change-row button{width:100%}}
+
+
+/* Fun update: friends, lobby emotes, modes, mobile canvas */
+.tiny-icon-btn{padding:6px 9px!important;border-radius:12px!important;font-size:14px!important;vertical-align:middle;background:#fffdf7!important}
+.badge-line{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}.badge-pill{background:#e0f2fe}
+.friend-search-row{display:grid;grid-template-columns:1fr auto;gap:10px}
+.friends-list{display:flex;flex-direction:column;gap:10px}.friend-card{display:flex;align-items:center;gap:10px;background:var(--paper2);border:3px solid var(--ink);box-shadow:4px 4px 0 var(--ink);border-radius:18px;padding:10px;position:relative}.friend-card .avatar-deco-wrap{width:62px;height:62px}.friend-card .avatar-img{width:46px;height:46px}.friend-card .avatar-deco{width:64px;height:64px}.friend-actions{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+.mode-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.mode-grid button{font-size:13px;padding:10px 8px}
+.lobby-emote-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}.lobby-emote-bar button{font-size:22px;padding:8px 11px;background:#fffdf7!important}
+.lobby-emote-pop{position:absolute;right:18px;top:-16px;font-size:34px;z-index:20;animation:emotePop 1.05s ease forwards;pointer-events:none;filter:drop-shadow(0 4px 3px rgba(0,0,0,.18))}
+@keyframes emotePop{0%{transform:translateY(14px) scale(.45);opacity:0}35%{transform:translateY(-8px) scale(1.18);opacity:1}100%{transform:translateY(-34px) scale(.9);opacity:0}}
+.mode-note{background:#fef3c7;border:3px solid var(--ink);box-shadow:3px 3px 0 var(--ink);border-radius:16px;padding:8px 10px;font-weight:1000;margin-bottom:8px}
+.mobile-fullscreen-btn{display:none;margin-bottom:8px;background:#e0f2fe!important}.canvas-wrap{position:relative}.blind-cover{display:none;position:absolute;inset:34px 0 0 0;background:rgba(255,250,240,.94);z-index:10;align-items:center;justify-content:center;text-align:center;font-size:32px;font-weight:1000;padding:20px}.blind-draw-active .blind-cover{display:flex}.blind-draw-active #drawCanvas{filter:blur(16px)}
+.username-modal-card{max-width:520px}
+@media(max-width:900px){
+ .mode-grid{grid-template-columns:repeat(2,1fr)}
+ .friend-search-row{grid-template-columns:1fr}.friend-actions{width:100%;margin-left:0}
+ .mobile-fullscreen-btn{display:inline-block}
+ .sticky-actions{position:sticky;bottom:8px;z-index:30;background:var(--paper);padding:8px;border:3px solid var(--ink);border-radius:18px;box-shadow:4px 4px 0 var(--ink)}
+ .mobile-canvas-focus header,.mobile-canvas-focus .notebook-chat,.mobile-canvas-focus .toolbox,.mobile-canvas-focus .top-row,.mobile-canvas-focus .back-btn{display:none!important}
+ .mobile-canvas-focus .app{padding:6px}
+ .mobile-canvas-focus .draw-layout,.mobile-canvas-focus .draw-main{display:block}
+ .mobile-canvas-focus .card{box-shadow:none;border:0;padding:4px;background:transparent}
+ .mobile-canvas-focus #drawCanvas{height:72vh!important;min-height:520px}
+}

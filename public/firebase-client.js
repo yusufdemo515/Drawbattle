@@ -67,6 +67,11 @@
       level: Math.max(1, Math.floor(Number(base.xp || 0) / 250) + 1),
       wins: Number(base.wins || 0),
       matches: Number(base.matches || 0),
+      daily: base.daily || { lastClaim: 0, streak: 0 },
+      badges: Array.isArray(base.badges) ? base.badges : [],
+      friends: Array.isArray(base.friends) ? base.friends : [],
+      friendRequestsIn: Array.isArray(base.friendRequestsIn) ? base.friendRequestsIn : [],
+      friendRequestsOut: Array.isArray(base.friendRequestsOut) ? base.friendRequestsOut : [],
       owned: Array.from(new Set([...(base.owned || []), ...freeOwned])),
       avatarId: base.avatarId || window.COSMETICS?.freeAvatarIds?.[0] || "free_purple_glasses",
       bannerId: base.bannerId || window.COSMETICS?.freeBannerIds?.[0] || "banner_free_pink",
@@ -87,6 +92,7 @@
       xp: profile.xp,
       wins: profile.wins,
       matches: profile.matches,
+      badges: Array.isArray(profile.badges) ? profile.badges : [],
       updatedAt: now
     }, { merge: true });
     return profile;
@@ -109,6 +115,11 @@
       level: Math.max(1, Math.floor(Number(profile.xp || 0) / 250) + 1),
       wins: Number(profile.wins || 0),
       matches: Number(profile.matches || 0),
+      daily: profile.daily || { lastClaim: 0, streak: 0 },
+      badges: Array.isArray(profile.badges) ? profile.badges : [],
+      friends: Array.isArray(profile.friends) ? profile.friends : [],
+      friendRequestsIn: Array.isArray(profile.friendRequestsIn) ? profile.friendRequestsIn : [],
+      friendRequestsOut: Array.isArray(profile.friendRequestsOut) ? profile.friendRequestsOut : [],
       owned: Array.isArray(profile.owned) ? profile.owned : [],
       avatarId: profile.avatarId || "",
       bannerId: profile.bannerId || "",
@@ -128,6 +139,7 @@
       xp: safe.xp,
       wins: safe.wins,
       matches: safe.matches,
+      badges: Array.isArray(safe.badges) ? safe.badges : [],
       updatedAt: now
     }, { merge: true });
     return true;

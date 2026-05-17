@@ -71,7 +71,7 @@
    </div>
    <div class="profile-info">
     <div class="row-wrap">
-     <div><h2 id="profileName">Player</h2><div class="small"><b>Notebook Artist</b></div></div>
+     <div><h2><span id="profileName">Player</span> <button class="tiny-icon-btn" onclick="openUsernameModal()" title="Change username">✏️</button></h2><div class="small"><b>Notebook Artist</b></div></div>
      <div><span id="profileCoins" class="pill coin-pill">🪙 0 coins</span> <span id="profileLevel" class="pill level-pill">⭐ Lv.1</span></div>
     </div>
     <div class="profile-stats">
@@ -80,14 +80,14 @@
      <div class="setting-box"><small>Owned Items</small><b id="profileOwned">0</b></div>
     </div>
     <div class="field"><b>Equipped</b><div id="equippedLine" class="small"></div></div>
-    <div class="field username-change-box">
-      <b>Username</b>
-      <p class="small">Username is unique. After changing, you can change again only after 15 days.</p>
-      <div class="username-change-row">
-        <input id="profileUsernameInput" placeholder="Your username"/>
-        <button id="profileUsernameBtn" onclick="changeProfileUsername()">Change Username</button>
-      </div>
-      <div id="profileUsernameHelp" class="small"></div>
+    <div class="field">
+      <b>Badges</b>
+      <div id="profileBadges" class="badge-line small">No badges yet.</div>
+    </div>
+    <div class="field">
+      <b>Daily Reward</b>
+      <p id="dailyRewardInfo" class="small">Daily streak: 0</p>
+      <button onclick="claimDailyReward()">Claim Daily Reward</button>
     </div>
    </div>
   </div>
@@ -106,6 +106,13 @@
    <div class="field"><b>Small Match</b><br>1st: 20 coins • 2nd: 10 coins • Others: 0</div>
    <div class="field"><b>XP</b><br>1st: 120 XP • 2nd: 80 XP • 3rd: 50 XP • Others: 15 XP</div>
    <button onclick="go('shop')" class="full">Open Shop</button>
+   <hr>
+   <h2>Friends</h2>
+   <div class="field">
+    <b>Add Friend by Username</b><br><br>
+    <div class="friend-search-row"><input id="friendUsernameInput" placeholder="Friend username"/><button onclick="sendFriendRequestUi()">Add</button></div>
+   </div>
+   <div id="friendsList" class="friends-list"></div>
   </div>
  </div>
 </section>
@@ -155,7 +162,8 @@
    <div class="field"><label>Player Slots</label><select id="slots"><option>10</option><option>8</option><option>6</option><option>4</option></select></div>
    <div class="field"><label>Drawing Time</label><select id="timer"><option value="180">3 min</option><option value="360">6 min</option><option value="480">8 min</option></select></div>
    <div class="field"><label>Rounds</label><select id="rounds"><option>8</option><option>4</option><option>6</option><option>10</option></select></div>
-   <div class="field"><label>Game Mode</label><div class="grid4"><button onclick="setMode('Normal')">Normal</button><button onclick="setMode('Medium')">Medium</button><button onclick="setMode('Hard')">Hard</button></div><div id="modePick" class="score-pop">Selected: Hard</div></div>
+   <div class="field"><label>Prompt Difficulty</label><div class="grid4"><button onclick="setMode('Normal')">Normal</button><button onclick="setMode('Medium')">Medium</button><button onclick="setMode('Hard')">Hard</button></div><div id="modePick" class="score-pop">Selected Prompt: Hard</div></div>
+   <div class="field"><label>Room Game Mode</label><div class="mode-grid"><button onclick="setRoomMode('Classic')">Classic</button><button onclick="setRoomMode('Speed')">Speed</button><button onclick="setRoomMode('Blind Draw')">Blind Draw</button><button onclick="setRoomMode('No Eraser')">No Eraser</button><button onclick="setRoomMode('One Color')">One Color</button><button onclick="setRoomMode('Hard Prompt')">Hard Prompt</button></div><div id="roomModePick" class="score-pop">Selected Mode: Classic</div></div>
   </div><br>
   <button onclick="createRoom()" class="full big-button">Create Room & Open Lobby</button>
  </div>
@@ -174,7 +182,8 @@
      <div class="setting-box"><small>Players</small><b id="slotInfo">0/10</b></div>
      <div class="setting-box"><small>Timer</small><b id="timerInfo">3 min</b></div>
      <div class="setting-box"><small>Rounds</small><b id="roundInfo">8</b></div>
-     <div class="setting-box"><small>Mode</small><b id="modeInfo">Hard</b></div>
+     <div class="setting-box"><small>Mode</small><b id="modeInfo">Classic • Hard</b></div>
+     <div class="setting-box"><small>Game Mode</small><b id="roomModeInfo">Classic</b></div>
    </div>
    <div id="hostSettings" class="field host-only">
     <label>Host can edit room settings here</label>
@@ -183,11 +192,12 @@
       <select id="lobbyTimer" onchange="updateHostSettings()"><option value="180">3 min</option><option value="360">6 min</option><option value="480">8 min</option></select>
       <select id="lobbyRounds" onchange="updateHostSettings()"><option>8</option><option>4</option><option>6</option><option>10</option></select>
       <select id="lobbyMode" onchange="updateHostSettings()"><option>Hard</option><option>Medium</option><option>Normal</option></select>
+      <select id="lobbyRoomMode" onchange="updateHostSettings()"><option>Classic</option><option>Speed</option><option>Blind Draw</option><option>No Eraser</option><option>One Color</option><option>Hard Prompt</option></select>
     </div>
    </div>
    <br><button id="startGameBtn" onclick="startGame()" class="full big-button host-only">Host Start Game</button>
   </div>
-  <div class="card chat"><h2>Chat</h2><div id="lobbyChat" class="chat-body"></div><div class="chat-input-row"><input id="lobbyMsg" placeholder="Type..." onkeydown="if(event.key==='Enter')sendChat('lobbyMsg')"/><button onclick="sendChat('lobbyMsg')">➤</button></div></div>
+  <div class="card chat"><h2>Lobby Emotes</h2><div id="lobbyEmoteBar" class="lobby-emote-bar"></div><h2>Chat</h2><div id="lobbyChat" class="chat-body"></div><div class="chat-input-row"><input id="lobbyMsg" placeholder="Type..." onkeydown="if(event.key==='Enter')sendChat('lobbyMsg')"/><button onclick="sendChat('lobbyMsg')">➤</button></div></div>
  </div>
 </section>
 
@@ -215,7 +225,7 @@
    <div id="afkBox" class="afk-warning">⚠ AFK check: if player does not draw/vote, auto skip will happen.</div>
    <div class="top-row">
      <div class="top-box"><small>Round</small><h2><span id="roundNow">1</span>/<span id="drawRounds">8</span></h2></div>
-     <div class="center"><div id="promptBox" class="prompt-box">✏️ CYBER DRAGON</div><p><b>Draw the object before time runs out</b></p></div>
+     <div class="center"><div id="promptBox" class="prompt-box">✏️ CYBER DRAGON</div><p><b>Draw the object before time runs out</b></p><span id="drawModeBadge" class="pill">Classic</span></div>
      <div class="top-box"><small>Time Left</small><h2 class="red" id="drawTimer">03:00</h2></div>
    </div>
    <div class="draw-main">
@@ -234,9 +244,13 @@
      <div class="colors" id="colors"></div>
     </div>
     <div>
-     <div class="canvas-wrap"><div class="canvas-top"><span></span><span></span><span></span><span></span><span></span></div><canvas id="drawCanvas" width="900" height="604"></canvas></div>
-     <div class="actions"><button onclick="undo()">↩ Undo</button><button onclick="redo()">↪ Redo</button><button onclick="clearCanvas()">🗑 Clear</button><button onclick="submitDrawing()">▶ Submit</button></div>
-     <div class="mobile-controls"><button onclick="setTool('pencil')">✏️ Pencil</button><button onclick="setTool('eraser')">🧽 Eraser</button><button onclick="undo()">↩ Undo</button><button onclick="redo()">↪ Redo</button></div>
+     <div class="mode-note" id="noEraserNote" style="display:none">No Eraser Mode: eraser disabled.</div>
+     <div class="mode-note" id="oneColorNote" style="display:none"></div>
+     <div class="mode-note" id="blindNote" style="display:none">Blind Draw: canvas hides in last 10 seconds.</div>
+     <button class="mobile-fullscreen-btn" onclick="toggleCanvasFullscreen()">⛶ Full Canvas</button>
+     <div class="canvas-wrap"><div class="canvas-top"><span></span><span></span><span></span><span></span><span></span></div><canvas id="drawCanvas" width="900" height="604"></canvas><div class="blind-cover">Blind Draw! Last 10 seconds hidden 👀</div></div>
+     <div class="actions sticky-actions"><button onclick="undo()">↩ Undo</button><button onclick="redo()">↪ Redo</button><button onclick="clearCanvas()">🗑 Clear</button><button onclick="submitDrawing()">▶ Submit</button></div>
+     <div class="mobile-controls"><button onclick="setTool('pencil')">✏️ Pencil</button><button onclick="setTool('eraser')">🧽 Eraser</button><button onclick="undo()">↩ Undo</button><button onclick="redo()">↪ Redo</button><button onclick="submitDrawing()">▶ Submit</button></div>
     </div>
    </div>
   </div>
@@ -274,6 +288,19 @@
 </div>
 
 <div id="toast" class="toast"></div>
+
+<div id="usernameModal" class="modal" onclick="closeUsernameModal()">
+ <div class="modal-card username-modal-card" onclick="event.stopPropagation()">
+  <button class="close" onclick="closeUsernameModal()">✕</button>
+  <h2>Change Username</h2>
+  <p class="small">Username is unique. After changing, you can change again only after 15 days.</p>
+  <input id="profileUsernameInput" placeholder="New username"/>
+  <br><br>
+  <button id="profileUsernameBtn" onclick="changeProfileUsername()">Change Username</button>
+  <div id="profileUsernameHelp" class="small" style="margin-top:12px"></div>
+ </div>
+</div>
+
 <div id="zoomModal" class="modal" onclick="closeZoom()">
  <div class="modal-card" onclick="event.stopPropagation()">
   <button class="close" onclick="closeZoom()">✕</button>
