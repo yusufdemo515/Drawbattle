@@ -33,6 +33,7 @@ let lastDrawSfx = 0;
 let spinSfxId = null;
 let localTimerId = null;
 let rewardNoticeKey = "";
+const hostRevealedUnsafe = new Set();
 
 const COS = window.COSMETICS || {avatars:[],banners:[],decorations:[],freeAvatarIds:[],freeBannerIds:[]};
 const allCosmetics = () => [...COS.avatars, ...COS.banners, ...COS.decorations];
@@ -275,6 +276,7 @@ function updateHostSettings(){
 }
 function startGame(){ playSfx("start"); socket.emit("startGame", { code: currentRoomCode }); }
 function finishVotingHost(){ socket.emit("finishVoting", { code: currentRoomCode }); }
+function playAgainLobby(){ votedFor=""; votePage=0; go("lobby", false); }
 
 function isMeHost(){ return roomState?.players?.some(p => p.sessionId === sessionId && p.host); }
 function me(){ return roomState?.players?.find(p => p.sessionId === sessionId); }
@@ -312,7 +314,8 @@ function renderLobby(){
  lobbyMode.value = roomState.settings.mode;
  document.querySelectorAll(".host-only").forEach(el => el.style.display = isMeHost() ? "" : "none");
  playerList.innerHTML = roomState.players.map(p => {
-  const actions = `${!p.host && isMeHost()?`<button class="report-btn" onclick="kick('${p.sessionId}')">Kick</button>`:""}${!p.host?`<button class="report-btn" onclick="reportPlayer('${p.sessionId}')">Report</button>`:""}`;
+  const canKick = isMeHost() && p.sessionId !== sessionId;
+  const actions = `${canKick?`<button class="report-btn" onclick="kick('${p.sessionId}')">Kick</button>`:""}${p.sessionId !== sessionId?`<button class="report-btn" onclick="reportPlayer('${p.sessionId}')">Report</button>`:""}`;
   return lobbyPlayerCardHtml(p, actions);
  }).join("");
  renderChatList(roomState.chat || []);
@@ -436,15 +439,24 @@ function renderVote(){
 function renderVoteCards(){
  const drawings=roomState.drawings || [];
  const start=votePage*3, visible=drawings.slice(start,start+3), pages=Math.max(1,Math.ceil(drawings.length/3));
+ const host = isMeHost();
  voteCards.innerHTML=visible.map((d,i)=>{
   const img=d.image || makeBlankDrawing(d.username);
-  return `<div class="vote-card" data-session="${d.sessionId}"><div class="drawing-preview"><button class="zoom-btn" onclick="openZoom('${d.username}',${start+i+1},'${img}')">🔍 Zoom</button><img src="${img}"></div><div class="player-row" style="box-shadow:none;border:0">${decoratedAvatarHtml(d.avatarSeed,d.decoId)}<div><b>${d.username}</b><br><small>${d.afk?'AFK auto-skip':'Votes hidden'}</small></div></div><div class="reaction-row">${reactions.map(r=>`<button class="reaction-btn" onclick="sendReaction(this,'${d.sessionId}','${r.replace(/'/g,"")}')">${r}</button>`).join("")}</div><button style="width:100%;margin-top:10px" ${d.sessionId===sessionId?'disabled':''} onclick="castVote('${d.sessionId}',this)">${votedFor===d.sessionId?'VOTED':'VOTE'}</button></div>`;
+  const isUnsafe = !!d.unsafe;
+  const hostCanSee = host && hostRevealedUnsafe.has(d.sessionId);
+  const blurClass = isUnsafe && !hostCanSee ? " unsafe-blurred" : "";
+  const showBtn = isUnsafe && host ? `<button class="zoom-btn show-unsafe-btn" onclick="toggleUnsafeReveal('${d.sessionId}')">${hostCanSee?'Hide':'Show me'}</button>` : "";
+  const reportBtn = d.sessionId!==sessionId ? `<button class="reaction-btn" onclick="reportUnsafeDrawing('${d.sessionId}')">🚩 Report image</button>` : "";
+  const accuracy = d.accuracyScore ? `<small class="accuracy-chip">Detector +${d.accuracyScore} pts</small>` : "";
+  return `<div class="vote-card" data-session="${d.sessionId}"><div class="drawing-preview${blurClass}"><button class="zoom-btn" onclick="openZoom('${d.username}',${start+i+1},'${img}')">🔍 Zoom</button>${showBtn}<img src="${img}">${isUnsafe && !hostCanSee?`<div class="unsafe-cover"><b>Blurred safety image</b><small>Adult/illegal report</small></div>`:""}</div><div class="player-row" style="box-shadow:none;border:0">${decoratedAvatarHtml(d.avatarSeed,d.decoId)}<div><b>${d.username}</b><br><small>${d.afk?'AFK auto-skip':'Votes hidden'}</small><br>${accuracy}</div></div><div class="reaction-row">${reactions.map(r=>`<button class="reaction-btn" onclick="sendReaction(this,'${d.sessionId}','${r.replace(/'/g,"")}')">${r}</button>`).join("")}${reportBtn}</div><button style="width:100%;margin-top:10px" ${d.sessionId===sessionId?'disabled':''} onclick="castVote('${d.sessionId}',this)">${votedFor===d.sessionId?'VOTED':'VOTE'}</button></div>`;
  }).join("");
  voteDots.innerHTML=Array.from({length:pages}).map((_,i)=>`<span class="dot-page ${i===votePage?'active':''}"></span>`).join("");
  showingText.textContent=`Showing ${drawings.length?start+1:0}–${Math.min(start+3,drawings.length)} of ${drawings.length}`;
  finishVoteBtn.style.display = isMeHost() ? "" : "none";
  finishVoteBtn.textContent = "Finish Voting Early";
 }
+function toggleUnsafeReveal(id){ if(hostRevealedUnsafe.has(id)) hostRevealedUnsafe.delete(id); else hostRevealedUnsafe.add(id); renderVoteCards(); }
+function reportUnsafeDrawing(id){ socket.emit("reportUnsafeDrawing", { code: currentRoomCode, targetSessionId: id }); }
 function makeBlankDrawing(name){
  const c=document.createElement("canvas");c.width=900;c.height=604;const ctx=c.getContext("2d");ctx.fillStyle="#fff";ctx.fillRect(0,0,c.width,c.height);ctx.fillStyle="#cbd5e1";ctx.font="bold 46px Trebuchet MS";ctx.fillText("AFK / Blank",320,280);ctx.font="bold 30px Trebuchet MS";ctx.fillText(name,380,340);return c.toDataURL("image/png");
 }
@@ -454,6 +466,7 @@ function castVote(id,btn){playSfx("vote");votedFor=id;socket.emit("vote",{code:c
 function sendReaction(btn,targetSessionId,reaction){playSfx("reaction");btn.classList.add("active");setTimeout(()=>btn.classList.remove("active"),700);socket.emit("reaction",{code:currentRoomCode,targetSessionId,reaction});showReaction(targetSessionId,reaction)}
 function showReaction(targetSessionId,reaction){const card=document.querySelector(`.vote-card[data-session="${targetSessionId}"]`);if(!card)return;const pop=document.createElement("div");pop.className="reaction-pop";pop.textContent=reaction.split(" ")[0];card.appendChild(pop);setTimeout(()=>pop.remove(),900)}
 function finishVotingHost(){ socket.emit("finishVoting", { code: currentRoomCode }); }
+function playAgainLobby(){ votedFor=""; votePage=0; go("lobby", false); }
 
 function renderRoundResults(){
  roundScore.style.display="block";

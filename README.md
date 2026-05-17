@@ -99,3 +99,12 @@ This is a functional multiplayer build, but before public launch you should late
 - Lobby/final player cards can be clicked to view public profile.
 - Public profile shows banner, avatar decoration, level, XP, wins, matches, match score.
 - Coins and owned inventory remain private.
+
+
+## Latest gameplay fixes
+- Host Kick button restored on non-host player cards.
+- Host can start a new match again after final results.
+- Game start now requires minimum 2 connected players.
+- Prompt pool expanded from the provided 1000+ object/name list.
+- Drawing safety report added: reported adult/illegal images are blurred for normal players; host can use Show me/Hide locally.
+- Detector hook added: current local detector rewards drawing effort only. True apple-vs-apple semantic AI needs a real vision AI/moderation service key later.

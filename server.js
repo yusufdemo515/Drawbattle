@@ -21,10 +21,14 @@ const BAD_WORDS = [
   "chutiya","chutia","bhosdi","bhosdike","madarchod","behenchod","randi","mc","bc"
 ];
 
+const WORD_POOL = (() => {
+  try { return require("./prompt-words.json"); } catch (_) { return []; }
+})();
+const FALLBACK_PROMPTS = ["Apple","Banana","Car","Cat","Dog","House","Tree","Robot","Dragon","Guitar"];
 const PROMPTS = {
-  Normal: ["Dragon","Castle","Robot","Pirate Ship","Katana","Crown","UFO","Dinosaur","Knight","Guitar","Burger","Zombie","Phoenix","Spaceship","Skull","Tank","Wizard","Treasure Chest","Rocket","Monster","Camera","Backpack","Penguin","Volcano"],
-  Medium: ["Cyber Dragon","Ancient Temple","Steam Train","Crystal Sword","Haunted Castle","Alien Robot","Golden Crown","Viking Ship","Magic Portal","Samurai Helmet","Lava Monster","Ice Dragon","Battle Axe","Space Station","Giant Spider","Demon Mask","Flying Car","Treasure Map","Jungle Ruins","Robot Dog"],
-  Hard: ["Mechanical Phoenix","Gothic Cathedral","Cyber Samurai","Dragon Skull","Steampunk Airship","Crystal Golem","Ancient War Machine","Haunted Pirate Ship","Alien Mothership","Royal Battle Armor","Demonic Throne","Floating Island Castle","Laser Cannon Tank","Mythic Kraken","Fantasy Clock Tower","Space Dragon","Cursed Laboratory","Clockwork Dragon"]
+  Normal: WORD_POOL.length ? WORD_POOL : FALLBACK_PROMPTS,
+  Medium: WORD_POOL.length ? WORD_POOL : FALLBACK_PROMPTS,
+  Hard: WORD_POOL.length ? WORD_POOL : FALLBACK_PROMPTS
 };
 
 const rooms = new Map();
@@ -93,6 +97,24 @@ function awardMatchRewards(room) {
   saveProfiles();
 }
 
+
+function estimateDrawingAccuracy(image) {
+  // Lightweight local scoring helper. This rewards effort/non-blank drawings.
+  // True semantic object detection, e.g. "apple looks like apple", needs a real vision moderation/AI service key.
+  if (typeof image !== "string" || !image.startsWith("data:image/")) return 0;
+  const len = image.length;
+  if (len < 18000) return 0;
+  if (len < 45000) return 8;
+  if (len < 95000) return 16;
+  if (len < 180000) return 24;
+  return 30;
+}
+
+function moderateDrawingImage(image) {
+  // Safe default: no automatic adult/illegal image detection without a real AI moderation provider.
+  // Host/user reports can flag a drawing as unsafe, then it is blurred for non-hosts.
+  return { unsafe: false, reason: "" };
+}
 
 function normalize(text) {
   return String(text || "")
@@ -226,8 +248,8 @@ function serializeRoom(room) {
     currentPrompt: room.phase === "draw" ? room.currentPrompt : "",
     timerEndsAt: room.timerEndsAt,
     chat: room.chat.slice(-50),
-    drawings: room.phase === "vote" || room.phase === "results"
-      ? [...room.drawings.values()].map(d => ({ sessionId: d.sessionId, username: d.username, avatarSeed: d.avatarSeed, decoId: d.decoId || "", image: d.image, afk: d.afk || false }))
+    drawings: room.phase === "vote" || room.phase === "roundResults" || room.phase === "results"
+      ? [...room.drawings.values()].map(d => ({ sessionId: d.sessionId, username: d.username, avatarSeed: d.avatarSeed, decoId: d.decoId || "", image: d.image, afk: d.afk || false, unsafe: !!d.unsafe, unsafeReports: d.unsafeReports || 0, moderationReason: d.moderationReason || "", accuracyScore: d.accuracyScore || 0 }))
       : [],
     reactionCounts: room.reactionCounts,
     rewards: room.rewards || {}
@@ -275,7 +297,10 @@ function startVoting(room) {
         avatarSeed: p.avatarSeed,
         decoId: p.decoId || "",
         image: null,
-        afk: true
+        afk: true,
+        unsafe: false,
+        unsafeReports: 0,
+        accuracyScore: 0
       });
     }
   }
@@ -314,6 +339,12 @@ function finishVoting(room) {
 
     p.score += votes * 100 + bonus;
   });
+
+  // Drawing effort / detector hook bonus. Real semantic AI can replace estimateDrawingAccuracy later.
+  for (const drawing of room.drawings.values()) {
+    const p = room.players.find(x => x.sessionId === drawing.sessionId);
+    if (p && drawing.accuracyScore) p.score += drawing.accuracyScore;
+  }
   room.phase = "roundResults";
   room.timerEndsAt = Date.now() + 4000;
   broadcastRoom(room);
@@ -502,7 +533,10 @@ io.on("connection", (socket) => {
 
   socket.on("startGame", ({ code }) => {
     const room = rooms.get(code);
-    if (!isHost(socket, room) || room.phase !== "lobby") return;
+    if (!isHost(socket, room)) return;
+    if (!["lobby", "results"].includes(room.phase)) return;
+    const connectedPlayers = room.players.filter(p => p.connected);
+    if (connectedPlayers.length < 2) return socket.emit("errorMsg", "Minimum 2 players required to start the game.");
     room.round = 0;
     room.usedPrompts = [];
     room.rewards = {};
@@ -527,12 +561,18 @@ io.on("connection", (socket) => {
     const player = room.players.find(p => p.sessionId === socket.data.sessionId);
     if (!player) return;
     player.lastActive = Date.now();
+    const safeImage = typeof image === "string" && image.length < 6_000_000 ? image : null;
+    const moderation = moderateDrawingImage(safeImage);
     room.drawings.set(player.sessionId, {
       sessionId: player.sessionId,
       username: player.username,
       avatarSeed: player.avatarSeed,
       decoId: player.decoId || "",
-      image: typeof image === "string" && image.length < 6_000_000 ? image : null
+      image: safeImage,
+      unsafe: !!moderation.unsafe,
+      unsafeReports: 0,
+      moderationReason: moderation.reason || "",
+      accuracyScore: estimateDrawingAccuracy(safeImage)
     });
     broadcastRoom(room);
     if (room.drawings.size >= room.players.length) startVoting(room);
@@ -553,6 +593,19 @@ io.on("connection", (socket) => {
     if (neededVotes > 0 && room.votes.size >= neededVotes) {
       finishVoting(room);
     }
+  });
+
+
+  socket.on("reportUnsafeDrawing", ({ code, targetSessionId }) => {
+    const room = rooms.get(code);
+    if (!room || !["vote", "roundResults", "results"].includes(room.phase)) return;
+    const drawing = room.drawings.get(targetSessionId);
+    if (!drawing) return;
+    drawing.unsafe = true;
+    drawing.unsafeReports = (drawing.unsafeReports || 0) + 1;
+    drawing.moderationReason = "Reported as adult/illegal by a player.";
+    socket.emit("notice", "Drawing reported and blurred for players.");
+    broadcastRoom(room);
   });
 
   socket.on("reaction", ({ code, targetSessionId, reaction }) => {
