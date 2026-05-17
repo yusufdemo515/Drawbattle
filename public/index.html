@@ -20,6 +20,11 @@
   <div class="field"><b>SFX</b><button id="sfxToggle" style="float:right" onclick="toggleSfx(this)">ON</button></div><br>
   <div class="field slider-field"><b>Music Volume</b><input type="range" min="0" max="100" value="70" oninput="musicVol=this.value/100;musicVolText.textContent=this.value+'%';bgMusic.volume=musicVol"><div class="small" id="musicVolText">70%</div></div><br>
   <div class="field slider-field"><b>SFX Volume</b><input type="range" min="0" max="100" value="80" oninput="sfxVol=this.value/100;sfxVolText.textContent=this.value+'%';playSfx('click')"><div class="small" id="sfxVolText">80%</div></div><br>
+  <div class="field sfx-pack-field"><b>SFX Sound Pack</b><div class="sfx-pack-grid" style="margin-top:12px">
+    <button class="sfx-pack-option" data-pack="cozy" onclick="setSfxPack('cozy')">☕ Cozy<br><small>soft notebook</small></button>
+    <button class="sfx-pack-option" data-pack="arcade" onclick="setSfxPack('arcade')">🕹️ Arcade<br><small>retro gamey</small></button>
+    <button class="sfx-pack-option" data-pack="meme" onclick="setSfxPack('meme')">💀 Meme<br><small>funny chaos</small></button>
+  </div><div class="small" style="margin-top:8px">Music unchanged. This only changes button/draw/vote/countdown SFX.</div></div><br>
   <div class="field"><b>Theme</b><div class="theme-grid" style="margin-top:12px">
     <button class="theme-option" onclick="setTheme('cozy')"><div class="theme-swatch" style="background:#fff7df"></div>Cozy</button>
     <button class="theme-option" onclick="setTheme('sky')"><div class="theme-swatch" style="background:#eaf4ff"></div>Sky</button>

@@ -31,6 +31,9 @@ let sfxVol = 0.8;
 let musicVol = 0.7;
 let lastDrawSfx = 0;
 let spinSfxId = null;
+let spinSfxTimeout = null;
+let sfxPack = localStorage.getItem("drawbattleSfxPack") || "cozy";
+let sfxCooldowns = {};
 let localTimerId = null;
 let rewardNoticeKey = "";
 const hostRevealedUnsafe = new Set();
@@ -120,6 +123,7 @@ socket.on("leftRoom", () => {
 socket.on("reaction", ({ targetSessionId, reaction }) => showReaction(targetSessionId, reaction));
 
 function go(id, pushHistory = true) {
+  if (currentScreen === "intro" && id !== "intro") stopSpinSfx();
   if (id === "rooms" && !validateProfile()) return;
   if (pushHistory && id !== currentScreen) {
     screenHistory.push(currentScreen);
@@ -168,47 +172,140 @@ function setTheme(t){
  const v=themes[t];document.documentElement.style.setProperty("--page",v[0]);document.documentElement.style.setProperty("--accent",v[1]);document.documentElement.style.setProperty("--accent2",v[2]);
 }
 
-function getAudio(){ if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); return audioCtx; }
+function getAudio(){
+ if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+ if(audioCtx.state === "suspended") audioCtx.resume().catch(()=>{});
+ return audioCtx;
+}
+function safeNow(){ try{return getAudio().currentTime}catch(e){return 0} }
+function rateLimit(key, ms){
+ const now = performance.now();
+ if(sfxCooldowns[key] && now - sfxCooldowns[key] < ms) return true;
+ sfxCooldowns[key] = now;
+ return false;
+}
 function tone(freq=440,duration=.08,type="sine",vol=.25,delay=0){
  if(!sfxEnabled) return;
  const ctx=getAudio(),osc=ctx.createOscillator(),gain=ctx.createGain();
- osc.type=type;osc.frequency.setValueAtTime(freq,ctx.currentTime+delay);
- gain.gain.setValueAtTime(0,ctx.currentTime+delay);gain.gain.linearRampToValueAtTime(vol*sfxVol,ctx.currentTime+delay+.01);gain.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+delay+duration);
- osc.connect(gain);gain.connect(ctx.destination);osc.start(ctx.currentTime+delay);osc.stop(ctx.currentTime+delay+duration+.02);
+ const t=ctx.currentTime+delay;
+ osc.type=type;osc.frequency.setValueAtTime(freq,t);
+ gain.gain.setValueAtTime(0,t);
+ gain.gain.linearRampToValueAtTime(Math.max(.0001,vol*sfxVol),t+.012);
+ gain.gain.exponentialRampToValueAtTime(.001,t+duration);
+ osc.connect(gain);gain.connect(ctx.destination);osc.start(t);osc.stop(t+duration+.04);
 }
-function noise(duration=.12,vol=.15){
+function sweep(from=220,to=440,duration=.18,type="sine",vol=.14,delay=0){
  if(!sfxEnabled) return;
- const ctx=getAudio(),buffer=ctx.createBuffer(1,ctx.sampleRate*duration,ctx.sampleRate),data=buffer.getChannelData(0);
+ const ctx=getAudio(),osc=ctx.createOscillator(),gain=ctx.createGain();
+ const t=ctx.currentTime+delay;
+ osc.type=type;osc.frequency.setValueAtTime(from,t);osc.frequency.exponentialRampToValueAtTime(Math.max(1,to),t+duration);
+ gain.gain.setValueAtTime(0,t);gain.gain.linearRampToValueAtTime(vol*sfxVol,t+.015);gain.gain.exponentialRampToValueAtTime(.001,t+duration);
+ osc.connect(gain);gain.connect(ctx.destination);osc.start(t);osc.stop(t+duration+.04);
+}
+function noise(duration=.12,vol=.15,filterFreq=1800){
+ if(!sfxEnabled) return;
+ const ctx=getAudio(),buffer=ctx.createBuffer(1,Math.max(1,Math.floor(ctx.sampleRate*duration)),ctx.sampleRate),data=buffer.getChannelData(0);
  for(let i=0;i<data.length;i++) data[i]=(Math.random()*2-1)*(1-i/data.length);
- const src=ctx.createBufferSource(),gain=ctx.createGain();gain.gain.value=vol*sfxVol;src.buffer=buffer;src.connect(gain);gain.connect(ctx.destination);src.start();
+ const src=ctx.createBufferSource(),gain=ctx.createGain(),filter=ctx.createBiquadFilter();
+ filter.type="lowpass"; filter.frequency.value=filterFreq;
+ gain.gain.value=vol*sfxVol;src.buffer=buffer;src.connect(filter);filter.connect(gain);gain.connect(ctx.destination);src.start();
 }
 function playSfx(name){
  if(!sfxEnabled) return;
  try{
-  if(name==="click"){tone(520,.05,"triangle",.12);tone(720,.05,"triangle",.09,.04)}
-  if(name==="start"){tone(392,.09,"square",.13);tone(523,.09,"square",.13,.09);tone(659,.12,"square",.13,.18)}
-  if(name==="count"){tone(460,.08,"sine",.18)}
-  if(name==="reveal"){tone(660,.09,"triangle",.16);tone(880,.12,"triangle",.16,.08);tone(1100,.16,"triangle",.14,.17)}
-  if(name==="submit"){tone(587,.08,"triangle",.16);tone(784,.12,"triangle",.16,.09)}
-  if(name==="vote"){tone(700,.06,"sine",.14);tone(930,.08,"sine",.14,.06)}
-  if(name==="zoom"){tone(300,.06,"sine",.1);tone(520,.1,"sine",.12,.05)}
-  if(name==="next"){tone(440,.06,"square",.1);tone(660,.08,"square",.1,.06)}
-  if(name==="win"){tone(523,.12,"triangle",.15);tone(659,.12,"triangle",.15,.12);tone(784,.18,"triangle",.16,.24);tone(1046,.25,"triangle",.14,.42)}
-  if(name==="erase"){noise(.06,.055)}
-  if(name==="bucket"){tone(220,.1,"sawtooth",.12);noise(.12,.07)}
-  if(name==="chat"){tone(760,.035,"triangle",.075);tone(980,.04,"triangle",.055,.025)}
-  if(name==="type"){tone(540,.025,"sine",.035)}
-  if(name==="draw"){noise(.035,.018)}
-  if(name==="spin"){tone(180,.04,"sawtooth",.055);tone(240,.035,"sawtooth",.045,.035)}
-  if(name==="reaction"){tone(620,.05,"triangle",.12);tone(820,.07,"triangle",.1,.04)}
+  if(name === "spin" && rateLimit("spin", 260)) return;
+  if(name === "draw" && rateLimit("draw", 85)) return;
+  if(name === "type" && rateLimit("type", 95)) return;
+  const pack = sfxPack || "cozy";
+  if(pack === "cozy") playCozySfx(name);
+  else if(pack === "arcade") playArcadeSfx(name);
+  else playMemeSfx(name);
  }catch(e){}
 }
+function playCozySfx(name){
+ if(name==="click"){tone(520,.045,"triangle",.08);tone(720,.05,"triangle",.055,.035)}
+ if(name==="start"){tone(392,.08,"sine",.10);tone(523,.10,"sine",.11,.08);tone(659,.13,"triangle",.10,.18)}
+ if(name==="count"){tone(470,.07,"sine",.12)}
+ if(name==="reveal"){tone(660,.10,"triangle",.11);tone(880,.14,"triangle",.10,.10);tone(1100,.18,"triangle",.08,.22)}
+ if(name==="submit"){tone(587,.07,"triangle",.11);tone(784,.11,"triangle",.09,.08)}
+ if(name==="vote"){tone(880,.08,"sine",.11);tone(1175,.10,"sine",.08,.07)}
+ if(name==="zoom"){sweep(260,480,.12,"sine",.07)}
+ if(name==="next"){tone(440,.06,"triangle",.08);tone(660,.08,"triangle",.07,.06)}
+ if(name==="win"){tone(523,.12,"triangle",.11);tone(659,.12,"triangle",.10,.12);tone(784,.18,"triangle",.10,.24);noise(.22,.035,2600)}
+ if(name==="erase"){noise(.055,.035,2200)}
+ if(name==="bucket"){sweep(240,160,.14,"sine",.08);noise(.09,.035,1200)}
+ if(name==="chat"){tone(760,.035,"triangle",.055);tone(980,.04,"triangle",.045,.025)}
+ if(name==="type"){tone(540,.022,"sine",.025)}
+ if(name==="draw"){noise(.032,.012,3200)}
+ if(name==="spin"){sweep(260,520,.15,"triangle",.045);tone(740,.04,"sine",.03,.11)}
+ if(name==="reaction"){tone(620,.05,"triangle",.08);tone(820,.07,"triangle",.065,.04)}
+}
+function playArcadeSfx(name){
+ if(name==="click"){tone(740,.035,"square",.08);tone(980,.045,"square",.07,.03)}
+ if(name==="start"){tone(330,.07,"square",.10);tone(494,.07,"square",.10,.07);tone(659,.10,"square",.10,.14)}
+ if(name==="count"){tone(620,.06,"square",.13)}
+ if(name==="reveal"){sweep(280,980,.22,"sawtooth",.09);tone(1180,.08,"square",.06,.20)}
+ if(name==="submit"){tone(660,.055,"square",.09);tone(990,.07,"square",.08,.06)}
+ if(name==="vote"){sweep(520,980,.10,"square",.075);tone(1260,.06,"square",.06,.09)}
+ if(name==="zoom"){sweep(180,520,.11,"sawtooth",.07)}
+ if(name==="next"){tone(520,.05,"square",.08);tone(780,.07,"square",.08,.05)}
+ if(name==="win"){[523,659,784,1046].forEach((f,i)=>tone(f,.10,"square",.08,i*.09));noise(.20,.05,3500)}
+ if(name==="erase"){noise(.045,.04,2500)}
+ if(name==="bucket"){sweep(180,90,.12,"sawtooth",.09);noise(.08,.05,900)}
+ if(name==="chat"){tone(920,.03,"square",.05)}
+ if(name==="type"){tone(700,.018,"square",.025)}
+ if(name==="draw"){noise(.025,.010,3600)}
+ if(name==="spin"){sweep(360,920,.14,"sawtooth",.045)}
+ if(name==="reaction"){tone(850,.04,"square",.08);tone(1120,.05,"square",.06,.04)}
+}
+function playMemeSfx(name){
+ if(name==="click"){tone(180,.05,"sawtooth",.09);tone(120,.06,"sawtooth",.06,.04)}
+ if(name==="start"){sweep(120,420,.20,"sawtooth",.11);noise(.16,.045,1200)}
+ if(name==="count"){tone(220,.07,"square",.12)}
+ if(name==="reveal"){sweep(90,55,.30,"sawtooth",.14);noise(.18,.05,700)}
+ if(name==="submit"){tone(300,.06,"triangle",.09);sweep(500,180,.12,"sine",.07,.05)}
+ if(name==="vote"){tone(210,.08,"sawtooth",.11);tone(160,.12,"sawtooth",.075,.07)}
+ if(name==="zoom"){sweep(440,120,.15,"sine",.08)}
+ if(name==="next"){tone(260,.05,"square",.08);tone(190,.07,"square",.07,.04)}
+ if(name==="win"){sweep(130,70,.25,"sawtooth",.12);tone(520,.08,"square",.08,.22);noise(.25,.055,900)}
+ if(name==="erase"){noise(.055,.04,1800)}
+ if(name==="bucket"){sweep(260,80,.18,"sawtooth",.10);noise(.12,.05,600)}
+ if(name==="chat"){tone(180,.045,"triangle",.07)}
+ if(name==="type"){tone(300,.018,"square",.025)}
+ if(name==="draw"){noise(.03,.011,2600)}
+ if(name==="spin"){sweep(140,280,.16,"sawtooth",.045)}
+ if(name==="reaction"){sweep(380,140,.10,"sawtooth",.09)}
+}
+function startSpinSfxLoop(){
+ if(spinSfxId) return;
+ playSfx("spin");
+ spinSfxId = setInterval(()=>playSfx("spin"), 340);
+ clearTimeout(spinSfxTimeout);
+ spinSfxTimeout = setTimeout(stopSpinSfx, 3600);
+}
+function stopSpinSfx(){
+ if(spinSfxId){ clearInterval(spinSfxId); spinSfxId=null; }
+ if(spinSfxTimeout){ clearTimeout(spinSfxTimeout); spinSfxTimeout=null; }
+}
+document.addEventListener("visibilitychange",()=>{ if(document.hidden) stopSpinSfx(); });
+window.addEventListener("blur", stopSpinSfx);
 document.addEventListener("click", e => { if(e.target.closest("button")){ playSfx("click"); startBgMusic(); }}, true);
 function startBgMusic(){ if(!bgMusic || !musicEnabled) return; bgMusic.volume=musicVol; bgMusic.play().catch(()=>{}); }
 document.addEventListener("pointerdown", startBgMusic, {once:true});
 document.addEventListener("keydown", startBgMusic, {once:true});
-function toggleSfx(btn){sfxEnabled=!sfxEnabled;btn.textContent=sfxEnabled?"ON":"OFF";if(sfxEnabled)playSfx("click")}
+function toggleSfx(btn){sfxEnabled=!sfxEnabled;btn.textContent=sfxEnabled?"ON":"OFF";if(!sfxEnabled)stopSpinSfx();if(sfxEnabled)playSfx("click")}
 function toggleMusic(btn){musicEnabled=!musicEnabled;btn.textContent=musicEnabled?"ON":"OFF"; if(musicEnabled) startBgMusic(); else bgMusic.pause();}
+function setSfxPack(pack){
+ sfxPack = pack;
+ localStorage.setItem("drawbattleSfxPack", pack);
+ updateSfxPackButtons();
+ playSfx("reveal");
+ showToast(`SFX Pack: ${pack[0].toUpperCase()+pack.slice(1)}`);
+}
+function updateSfxPackButtons(){
+ document.querySelectorAll(".sfx-pack-option").forEach(btn=>btn.classList.toggle("active", btn.dataset.pack===sfxPack));
+}
+setTimeout(updateSfxPackButtons, 300);
 
 function showToast(msg){
  toast.textContent=msg;toast.classList.add("show");
@@ -274,7 +371,7 @@ function updateHostSettings(){
   settings: { slots: lobbySlots.value, timer: lobbyTimer.value, rounds: lobbyRounds.value, mode: lobbyMode.value }
  });
 }
-function startGame(){ playSfx("start"); socket.emit("startGame", { code: currentRoomCode }); }
+function startGame(){ stopSpinSfx(); playSfx("start"); socket.emit("startGame", { code: currentRoomCode }); }
 function finishVotingHost(){ socket.emit("finishVoting", { code: currentRoomCode }); }
 function playAgainLobby(){ votedFor=""; votePage=0; go("lobby", false); }
 
@@ -300,6 +397,7 @@ function renderPublicRooms(rooms){
 function joinPublic(code){ joinCode.value = code; joinRoomByCode(); }
 
 function renderLobby(){
+ stopSpinSfx();
  go("lobby", false);
  lobbyName.textContent = roomState.name;
  roomPrivacy.innerHTML = roomState.type === "Private Room" ? "<b>Private code hidden. Copy invite code only.</b>" : "<b>Public room visible in room list.</b>";
@@ -324,6 +422,7 @@ function kick(id){ socket.emit("kick", { code: currentRoomCode, targetSessionId:
 function reportPlayer(id){ socket.emit("report", { code: currentRoomCode, targetSessionId: id }); showToast("Report sent."); }
 
 function renderIntro(){
+ stopSpinSfx();
  go("intro", false);
  introRound.textContent = `${roomState.round}/${roomState.totalRounds}`;
  const msLeft = Math.max(0, roomState.timerEndsAt - Date.now());
@@ -346,16 +445,17 @@ function renderIntro(){
    slotBlur.style.display = "block";
    promptReveal.style.display = "none";
    introHint.textContent = "Random object is spinning...";
-   if(!spinSfxId) spinSfxId=setInterval(()=>playSfx("spin"),120);
+   startSpinSfxLoop();
   }
   if(left <= 500){
    clearInterval(localTimerId);
-   if(spinSfxId){clearInterval(spinSfxId);spinSfxId=null;}
+   stopSpinSfx();
   }
  }, 500);
 }
 
 function renderDraw(){
+ stopSpinSfx();
  go("draw", false);
  roundNow.textContent = roomState.round;
  drawRounds.textContent = roomState.totalRounds;
@@ -430,6 +530,7 @@ function floodFill(startX,startY,fill){
 }
 
 function renderVote(){
+ stopSpinSfx();
  go("vote", false);
  voteRound.textContent=roomState.round; voteRounds.textContent=roomState.totalRounds;
  startLocalTimer(voteTimer,()=>{});
@@ -476,6 +577,7 @@ function renderRoundResults(){
 }
 
 function renderResults(){
+ stopSpinSfx();
  go("results", false);
  playSfx("win");
  const ranking=[...roomState.players].sort((a,b)=>b.score-a.score);
