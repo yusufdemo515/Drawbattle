@@ -2,6 +2,8 @@ const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const { nanoid } = require("nanoid");
+const fs = require("fs");
+const path = require("path");
 
 const app = express();
 const server = http.createServer(app);
@@ -27,6 +29,67 @@ const PROMPTS = {
 
 const rooms = new Map();
 const sessions = new Map();
+
+const COSMETICS = require("./public/cosmetics-data.json");
+const ITEM_MAP = new Map([...COSMETICS.avatars, ...COSMETICS.banners, ...COSMETICS.decorations].map(i => [i.id, i]));
+const DEFAULT_OWNED = [...COSMETICS.freeAvatarIds, ...COSMETICS.freeBannerIds];
+const DATA_DIR = path.join(__dirname, "data");
+const PROFILE_FILE = path.join(DATA_DIR, "profiles.json");
+let profiles = {};
+try { fs.mkdirSync(DATA_DIR, { recursive: true }); profiles = JSON.parse(fs.readFileSync(PROFILE_FILE, "utf8")); } catch (_) { profiles = {}; }
+function saveProfiles() { try { fs.writeFileSync(PROFILE_FILE, JSON.stringify(profiles, null, 2)); } catch (e) { console.error("Profile save failed", e.message); } }
+function makeDefaultProfile(profileId, username = "") {
+  return {
+    profileId,
+    username: cleanText(username, 24) || "Player",
+    coins: 0,
+    xp: 0,
+    level: 1,
+    wins: 0,
+    owned: [...DEFAULT_OWNED],
+    avatarId: COSMETICS.freeAvatarIds[0] || "free_purple_glasses",
+    bannerId: COSMETICS.freeBannerIds[0] || "banner_free_pink",
+    decoId: ""
+  };
+}
+function getProfile(profileId, username = "") {
+  profileId = cleanText(profileId, 40) || nanoid(12);
+  if (!profiles[profileId]) { profiles[profileId] = makeDefaultProfile(profileId, username); saveProfiles(); }
+  if (username && cleanText(username, 24)) profiles[profileId].username = cleanText(username, 24);
+  return profiles[profileId];
+}
+function sanitizeProfile(p) {
+  p.owned = Array.isArray(p.owned) ? [...new Set([...DEFAULT_OWNED, ...p.owned])] : [...DEFAULT_OWNED];
+  if (!ITEM_MAP.has(p.avatarId)) p.avatarId = COSMETICS.freeAvatarIds[0];
+  if (!ITEM_MAP.has(p.bannerId)) p.bannerId = COSMETICS.freeBannerIds[0];
+  if (p.decoId && !ITEM_MAP.has(p.decoId)) p.decoId = "";
+  p.level = Math.max(1, Math.floor((p.xp || 0) / 250) + 1);
+  return p;
+}
+function awardMatchRewards(room) {
+  if (room.rewardsAwarded) return;
+  room.rewardsAwarded = true;
+  room.rewards = {};
+  const ranking = [...room.players].sort((a,b) => (b.score || 0) - (a.score || 0));
+  const small = ranking.length <= 3;
+  const coinTable = small ? [20, 10, 0] : [60, 35, 15];
+  const xpTable = [120, 80, 50];
+  ranking.forEach((player, index) => {
+    if (!player.profileId) return;
+    const profile = sanitizeProfile(getProfile(player.profileId, player.username));
+    const coins = coinTable[index] || 0;
+    const xp = xpTable[index] || 15;
+    profile.coins = (profile.coins || 0) + coins;
+    profile.xp = (profile.xp || 0) + xp;
+    if (index === 0) profile.wins = (profile.wins || 0) + 1;
+    sanitizeProfile(profile);
+    room.rewards[player.sessionId] = { coins, xp, place: index + 1 };
+    const sess = sessions.get(player.sessionId);
+    if (sess?.socketId) io.to(sess.socketId).emit("profileData", profile);
+  });
+  saveProfiles();
+}
+
 
 function normalize(text) {
   return String(text || "")
@@ -91,6 +154,8 @@ function makeRoom({ name, type, settings }) {
     drawings: new Map(),
     votes: new Map(),
     reactionCounts: {},
+    rewards: {},
+    rewardsAwarded: false,
     timerEndsAt: null,
     timerHandle: null,
     chat: []
@@ -139,6 +204,9 @@ function serializeRoom(room) {
       sessionId: p.sessionId,
       username: p.username,
       avatarSeed: p.avatarSeed,
+      profileId: p.profileId || "",
+      bannerId: p.bannerId || "",
+      decoId: p.decoId || "",
       score: p.score,
       host: p.sessionId === room.hostSessionId,
       connected: p.connected,
@@ -152,9 +220,10 @@ function serializeRoom(room) {
     timerEndsAt: room.timerEndsAt,
     chat: room.chat.slice(-50),
     drawings: room.phase === "vote" || room.phase === "results"
-      ? [...room.drawings.values()].map(d => ({ sessionId: d.sessionId, username: d.username, avatarSeed: d.avatarSeed, image: d.image }))
+      ? [...room.drawings.values()].map(d => ({ sessionId: d.sessionId, username: d.username, avatarSeed: d.avatarSeed, decoId: d.decoId || "", image: d.image, afk: d.afk || false }))
       : [],
-    reactionCounts: room.reactionCounts
+    reactionCounts: room.reactionCounts,
+    rewards: room.rewards || {}
   };
 }
 
@@ -197,6 +266,7 @@ function startVoting(room) {
         sessionId: p.sessionId,
         username: p.username,
         avatarSeed: p.avatarSeed,
+        decoId: p.decoId || "",
         image: null,
         afk: true
       });
@@ -245,11 +315,18 @@ function finishVoting(room) {
     if (room.round >= room.settings.rounds) {
       room.phase = "results";
       room.timerEndsAt = null;
+      awardMatchRewards(room);
       broadcastRoom(room);
     } else {
       startRound(room);
     }
   }, 4200);
+}
+
+function equipProfileItem(profile, item) {
+  if (item.kind === "avatar") profile.avatarId = item.id;
+  if (item.kind === "banner") profile.bannerId = item.id;
+  if (item.kind === "deco") profile.decoId = item.id;
 }
 
 function isHost(socket, room) {
@@ -281,7 +358,53 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("createRoom", ({ username, avatarSeed, roomName, type, settings }) => {
+
+
+  socket.on("profileLogin", ({ profileId, username }) => {
+    const profile = sanitizeProfile(getProfile(profileId, username));
+    socket.emit("profileData", profile);
+  });
+
+  socket.on("getProfile", ({ profileId }) => {
+    const profile = sanitizeProfile(getProfile(profileId));
+    socket.emit("profileData", profile);
+  });
+
+  socket.on("profileUpdate", ({ profileId, username }) => {
+    const profile = sanitizeProfile(getProfile(profileId, username));
+    if (username && cleanText(username, 24)) profile.username = cleanText(username, 24);
+    saveProfiles();
+    socket.emit("profileData", profile);
+  });
+
+  socket.on("buyItem", ({ profileId, itemId }) => {
+    const profile = sanitizeProfile(getProfile(profileId));
+    const item = ITEM_MAP.get(itemId);
+    if (!item) return socket.emit("shopError", "Item not found.");
+    if (!profile.owned.includes(itemId)) {
+      if ((profile.coins || 0) < (item.price || 0)) return socket.emit("shopError", "Not enough coins.");
+      profile.coins -= item.price || 0;
+      profile.owned.push(itemId);
+    }
+    equipProfileItem(profile, item);
+    sanitizeProfile(profile);
+    saveProfiles();
+    socket.emit("profileData", profile);
+  });
+
+  socket.on("equipItem", ({ profileId, itemId }) => {
+    const profile = sanitizeProfile(getProfile(profileId));
+    const item = ITEM_MAP.get(itemId);
+    if (!item) return socket.emit("shopError", "Item not found.");
+    if (!profile.owned.includes(itemId)) return socket.emit("shopError", "Buy this item first.");
+    if (item.kind === "deco" && profile.decoId === itemId) profile.decoId = "";
+    else equipProfileItem(profile, item);
+    sanitizeProfile(profile);
+    saveProfiles();
+    socket.emit("profileData", profile);
+  });
+
+  socket.on("createRoom", ({ username, avatarSeed, profileId, bannerId, decoId, roomName, type, settings }) => {
     username = cleanText(username, 24);
     roomName = cleanText(roomName, 50);
     if (!username) return socket.emit("errorMsg", "Bad/empty username not allowed.");
@@ -291,7 +414,12 @@ io.on("connection", (socket) => {
     const sessionId = socket.data.sessionId || nanoid(16);
     socket.data.sessionId = sessionId;
     room.hostSessionId = sessionId;
-    room.players.push({ sessionId, username, avatarSeed: avatarSeed || "Aarav", score: 0, connected: true, lastActive: Date.now() });
+    const prof = profileId ? sanitizeProfile(getProfile(profileId, username)) : null;
+    const owned = new Set(prof?.owned || []);
+    avatarSeed = owned.has(avatarSeed) ? avatarSeed : (prof?.avatarId || COSMETICS.freeAvatarIds[0]);
+    bannerId = owned.has(bannerId) ? bannerId : (prof?.bannerId || COSMETICS.freeBannerIds[0]);
+    decoId = owned.has(decoId) ? decoId : (prof?.decoId || "");
+    room.players.push({ sessionId, profileId: prof?.profileId || "", username, avatarSeed: avatarSeed || COSMETICS.freeAvatarIds[0], bannerId, decoId, score: 0, connected: true, lastActive: Date.now() });
     rooms.set(room.code, room);
     sessions.set(sessionId, { socketId: socket.id, roomCode: room.code });
     socket.join(room.code);
@@ -299,7 +427,7 @@ io.on("connection", (socket) => {
     broadcastRoom(room);
   });
 
-  socket.on("joinRoom", ({ code, username, avatarSeed }) => {
+  socket.on("joinRoom", ({ code, username, avatarSeed, profileId, bannerId, decoId }) => {
     username = cleanText(username, 24);
     if (!username) return socket.emit("errorMsg", "Bad/empty username not allowed.");
     code = String(code || "").toUpperCase().trim();
@@ -310,13 +438,21 @@ io.on("connection", (socket) => {
     const sessionId = socket.data.sessionId || nanoid(16);
     socket.data.sessionId = sessionId;
     let player = room.players.find(p => p.sessionId === sessionId);
+    const prof = profileId ? sanitizeProfile(getProfile(profileId, username)) : null;
+    const owned = new Set(prof?.owned || []);
+    avatarSeed = owned.has(avatarSeed) ? avatarSeed : (prof?.avatarId || COSMETICS.freeAvatarIds[0]);
+    bannerId = owned.has(bannerId) ? bannerId : (prof?.bannerId || COSMETICS.freeBannerIds[0]);
+    decoId = owned.has(decoId) ? decoId : (prof?.decoId || "");
     if (!player) {
-      player = { sessionId, username, avatarSeed: avatarSeed || "Aarav", score: 0, connected: true, lastActive: Date.now() };
+      player = { sessionId, profileId: prof?.profileId || "", username, avatarSeed: avatarSeed || COSMETICS.freeAvatarIds[0], bannerId, decoId, score: 0, connected: true, lastActive: Date.now() };
       room.players.push(player);
     } else {
       player.connected = true;
+      player.profileId = prof?.profileId || player.profileId || "";
       player.username = username;
       player.avatarSeed = avatarSeed || player.avatarSeed;
+      player.bannerId = bannerId || player.bannerId;
+      player.decoId = decoId || player.decoId || "";
     }
     sessions.set(sessionId, { socketId: socket.id, roomCode: room.code });
     socket.join(room.code);
@@ -343,6 +479,8 @@ io.on("connection", (socket) => {
     if (!isHost(socket, room) || room.phase !== "lobby") return;
     room.round = 0;
     room.usedPrompts = [];
+    room.rewards = {};
+    room.rewardsAwarded = false;
     room.players.forEach(p => p.score = 0);
     startRound(room);
   });
@@ -367,6 +505,7 @@ io.on("connection", (socket) => {
       sessionId: player.sessionId,
       username: player.username,
       avatarSeed: player.avatarSeed,
+      decoId: player.decoId || "",
       image: typeof image === "string" && image.length < 6_000_000 ? image : null
     });
     broadcastRoom(room);

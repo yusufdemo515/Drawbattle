@@ -1,6 +1,6 @@
 const socket = io();
 
-const avatarSeeds = ["Aarav","Kabir","Rohan","Zayan","Aisha","Maya","Sara","Nora","Rehan","Arjun","Vihaan","Ishaan","Riya","Meera","Anaya","Zoya"];
+const avatarSeeds = [];
 const reactions = ["🔥 Masterpiece","😂 What is this","😭 Bro tried","👀 Sus","⭐ Michelin Art","🌀 Confusing"];
 const funTitles = ["Sketch King 👑","Chaos Artist 🎭","Potato Drawer 🥔","One Line Legend ✏️","Blindfold Picasso 🎨","Certified Scribbler 🌀","Cursed Creator 👻","Detail Demon 🔥"];
 
@@ -8,7 +8,10 @@ let sessionId = localStorage.getItem("drawbattleSessionId") || null;
 let currentRoomCode = localStorage.getItem("drawbattleRoomCode") || "";
 let screenHistory = ["home"];
 let currentScreen = "home";
-let selectedSeed = localStorage.getItem("drawbattleSeed") || "Aarav";
+let profileId = localStorage.getItem("drawbattleProfileId") || null;
+let userProfile = null;
+let selectedSeed = localStorage.getItem("drawbattleSeed") || (window.COSMETICS?.freeAvatarIds?.[0] || "free_purple_glasses");
+let shopTab = "avatars";
 let gameMode = "Hard";
 let roomState = null;
 let votePage = 0;
@@ -29,15 +32,39 @@ let musicVol = 0.7;
 let lastDrawSfx = 0;
 let spinSfxId = null;
 let localTimerId = null;
+let rewardNoticeKey = "";
 
-const avatarUrl = s => `https://api.dicebear.com/9.x/lorelei/svg?seed=${encodeURIComponent(s)}&backgroundColor=ffffff,fef3c7,ffedd5,ffe4e6,e0f2fe,dcfce7,ede9fe&radius=50`;
+const COS = window.COSMETICS || {avatars:[],banners:[],decorations:[],freeAvatarIds:[],freeBannerIds:[]};
+const allCosmetics = () => [...COS.avatars, ...COS.banners, ...COS.decorations];
+const findCosmetic = id => allCosmetics().find(x => x.id === id);
+const avatarUrl = id => findCosmetic(id)?.url || COS.avatars[0]?.url || `https://api.dicebear.com/9.x/lorelei/svg?seed=${encodeURIComponent(id||"Player")}&backgroundColor=ffffff,fef3c7,ffedd5,ffe4e6,e0f2fe,dcfce7,ede9fe&radius=50`;
+const bannerCss = id => { const b=findCosmetic(id); return b?.color || (b?.url ? `url('${b.url}')` : "linear-gradient(135deg,#ffd6e8,#ffeff7)"); };
+function decoratedAvatarHtml(avatarId, decoId="", cls="avatar-img"){
+ const deco = decoId ? findCosmetic(decoId) : null;
+ return `<span class="avatar-deco-wrap"><img class="${cls}" src="${avatarUrl(avatarId)}">${deco?`<img class="avatar-deco" src="${deco.url}">`:""}</span>`;
+}
+function defaultProfile(){
+ return {
+  profileId: profileId || ("P-" + Math.random().toString(36).slice(2,10).toUpperCase()),
+  username: localStorage.getItem("drawbattleUsername") || "",
+  coins: 0, xp: 0, level: 1, wins: 0,
+  owned: [...COS.freeAvatarIds, ...COS.freeBannerIds],
+  avatarId: selectedSeed,
+  bannerId: COS.freeBannerIds?.[0] || "banner_free_pink",
+  decoId: ""
+ };
+}
 
 socket.emit("identify", { sessionId });
 
 socket.on("session", ({ sessionId: sid }) => {
   sessionId = sid;
   localStorage.setItem("drawbattleSessionId", sid);
+  if(!profileId){ profileId = "P-" + sid.slice(0,8).toUpperCase(); localStorage.setItem("drawbattleProfileId", profileId); }
+  socket.emit("profileLogin", { profileId, username: localStorage.getItem("drawbattleUsername") || "" });
 });
+socket.on("profileData", (profile) => { userProfile = profile; profileId = profile.profileId; localStorage.setItem("drawbattleProfileId", profileId); selectedSeed = profile.avatarId || selectedSeed; localStorage.setItem("drawbattleSeed", selectedSeed); renderAvatars(); renderProfilePage(); renderShop(); });
+socket.on("shopError", msg => showToast("❌ " + msg));
 socket.on("publicRooms", renderPublicRooms);
 socket.on("joinedRoom", ({ code }) => {
   currentRoomCode = code;
@@ -84,6 +111,9 @@ function go(id, pushHistory = true) {
   target.classList.add("active");
   target.style.display = "block";
   if (id === "draw") setupCanvas();
+  if (id === "profile") renderProfilePage();
+  if (id === "shop") renderShop();
+  if (id === "avatar") renderAvatars();
   scrollTo(0,0);
 }
 
@@ -166,13 +196,23 @@ function showToast(msg){
 }
 
 function renderAvatars(){
- avatarGrid.innerHTML = avatarSeeds.map(s => `<button class="avatar-card ${s===selectedSeed?'selected':''}" onclick="selectAvatar('${s}')"><img class="avatar-img" src="${avatarUrl(s)}"><div class="small">${s}</div></button>`).join("");
+ const prof = userProfile || defaultProfile();
+ const owned = new Set(prof.owned || []);
+ const ownedAvatars = COS.avatars.filter(a => owned.has(a.id));
+ selectedSeed = prof.avatarId || selectedSeed || ownedAvatars[0]?.id;
+ avatarGrid.innerHTML = ownedAvatars.map(a => `<button class="avatar-card ${a.id===selectedSeed?'selected':''}" onclick="selectAvatar('${a.id}')"><img class="avatar-img" src="${a.url}"><div class="small">${a.name}</div></button>`).join("");
 }
-function selectAvatar(seed){ selectedSeed=seed; localStorage.setItem("drawbattleSeed", seed); renderAvatars(); }
+function selectAvatar(seed){
+ selectedSeed=seed; localStorage.setItem("drawbattleSeed", seed);
+ if(userProfile){ userProfile.avatarId=seed; socket.emit("equipItem", { profileId:userProfile.profileId, itemId:seed }); }
+ renderAvatars(); renderProfilePage();
+}
 
 function validateProfile(){
  const u = username.value.trim();
  if(!u){ showToast("❌ Username required."); return false; }
+ localStorage.setItem("drawbattleUsername", u);
+ if(userProfile){ userProfile.username = u; socket.emit("profileUpdate", { profileId:userProfile.profileId, username:u }); }
  return true;
 }
 function validateProfileAndGoRooms(){ if(validateProfile()) go("rooms"); }
@@ -189,6 +229,9 @@ function createRoom(){
  socket.emit("createRoom", {
   username: username.value.trim(),
   avatarSeed: selectedSeed,
+  profileId: userProfile?.profileId || profileId,
+  bannerId: userProfile?.bannerId || "banner_free_pink",
+  decoId: userProfile?.decoId || "",
   roomName: name,
   type: roomType.value,
   settings: { slots: slots.value, timer: timer.value, rounds: rounds.value, mode: gameMode }
@@ -196,7 +239,7 @@ function createRoom(){
 }
 function joinRoomByCode(){
  if(!validateProfile()) return;
- socket.emit("joinRoom", { code: joinCode.value.trim(), username: username.value.trim(), avatarSeed: selectedSeed });
+ socket.emit("joinRoom", { code: joinCode.value.trim(), username: username.value.trim(), avatarSeed: selectedSeed, profileId: userProfile?.profileId || profileId, bannerId: userProfile?.bannerId || "banner_free_pink", decoId: userProfile?.decoId || "" });
 }
 function copyInvite(){
  navigator.clipboard?.writeText(currentRoomCode);
@@ -249,7 +292,7 @@ function renderLobby(){
  lobbyRounds.value = roomState.settings.rounds;
  lobbyMode.value = roomState.settings.mode;
  document.querySelectorAll(".host-only").forEach(el => el.style.display = isMeHost() ? "" : "none");
- playerList.innerHTML = roomState.players.map(p => `<div class="player-row"><img src="${avatarUrl(p.avatarSeed)}"><div class="safe"><b>${p.username}</b><br><small>${p.host?'Host':'Player'} • ${p.score} pts ${p.connected?'':'• reconnecting'}</small></div><span class="dot" style="background:${p.connected?'#22c55e':'#f59e0b'}"></span>${!p.host && isMeHost()?`<button class="report-btn" onclick="kick('${p.sessionId}')">Kick</button>`:""}${!p.host?`<button class="report-btn" onclick="reportPlayer('${p.sessionId}')">Report</button>`:""}</div>`).join("");
+ playerList.innerHTML = roomState.players.map(p => `<div class="player-row">${decoratedAvatarHtml(p.avatarSeed,p.decoId)}<div class="safe"><b>${p.username}</b><br><small>${p.host?'Host':'Player'} • ${p.score} pts ${p.connected?'':'• reconnecting'}</small></div><span class="dot" style="background:${p.connected?'#22c55e':'#f59e0b'}"></span>${!p.host && isMeHost()?`<button class="report-btn" onclick="kick('${p.sessionId}')">Kick</button>`:""}${!p.host?`<button class="report-btn" onclick="reportPlayer('${p.sessionId}')">Report</button>`:""}</div>`).join("");
  renderChatList(roomState.chat || []);
 }
 function kick(id){ socket.emit("kick", { code: currentRoomCode, targetSessionId: id }); }
@@ -373,7 +416,7 @@ function renderVoteCards(){
  const start=votePage*3, visible=drawings.slice(start,start+3), pages=Math.max(1,Math.ceil(drawings.length/3));
  voteCards.innerHTML=visible.map((d,i)=>{
   const img=d.image || makeBlankDrawing(d.username);
-  return `<div class="vote-card" data-session="${d.sessionId}"><div class="drawing-preview"><button class="zoom-btn" onclick="openZoom('${d.username}',${start+i+1},'${img}')">🔍 Zoom</button><img src="${img}"></div><div class="player-row" style="box-shadow:none;border:0"><img src="${avatarUrl(d.avatarSeed)}"><div><b>${d.username}</b><br><small>${d.afk?'AFK auto-skip':'Votes hidden'}</small></div></div><div class="reaction-row">${reactions.map(r=>`<button class="reaction-btn" onclick="sendReaction(this,'${d.sessionId}','${r.replace(/'/g,"")}')">${r}</button>`).join("")}</div><button style="width:100%;margin-top:10px" ${d.sessionId===sessionId?'disabled':''} onclick="castVote('${d.sessionId}',this)">${votedFor===d.sessionId?'VOTED':'VOTE'}</button></div>`;
+  return `<div class="vote-card" data-session="${d.sessionId}"><div class="drawing-preview"><button class="zoom-btn" onclick="openZoom('${d.username}',${start+i+1},'${img}')">🔍 Zoom</button><img src="${img}"></div><div class="player-row" style="box-shadow:none;border:0">${decoratedAvatarHtml(d.avatarSeed,d.decoId)}<div><b>${d.username}</b><br><small>${d.afk?'AFK auto-skip':'Votes hidden'}</small></div></div><div class="reaction-row">${reactions.map(r=>`<button class="reaction-btn" onclick="sendReaction(this,'${d.sessionId}','${r.replace(/'/g,"")}')">${r}</button>`).join("")}</div><button style="width:100%;margin-top:10px" ${d.sessionId===sessionId?'disabled':''} onclick="castVote('${d.sessionId}',this)">${votedFor===d.sessionId?'VOTED':'VOTE'}</button></div>`;
  }).join("");
  voteDots.innerHTML=Array.from({length:pages}).map((_,i)=>`<span class="dot-page ${i===votePage?'active':''}"></span>`).join("");
  showingText.textContent=`Showing ${drawings.length?start+1:0}–${Math.min(start+3,drawings.length)} of ${drawings.length}`;
@@ -402,10 +445,19 @@ function renderResults(){
  playSfx("win");
  const ranking=[...roomState.players].sort((a,b)=>b.score-a.score);
  winnerTitle.textContent=funTitles[Math.floor(Math.random()*funTitles.length)];
- podium.innerHTML=[["2",ranking[1],"height:150px;background:#e5e7eb"],["1",ranking[0],"height:210px;background:var(--accent)"],["3",ranking[2],"height:120px;background:#e5e7eb"]].filter(x=>x[1]).map(p=>`<div><img class="avatar-img" src="${avatarUrl(p[1].avatarSeed)}"><h3 class="safe">${p[1].username}</h3><b>${p[1].score} pts</b><div class="bar" style="${p[2]}">#${p[0]}</div></div>`).join("");
+ podium.innerHTML=[["2",ranking[1],"height:150px;background:#e5e7eb"],["1",ranking[0],"height:210px;background:var(--accent)"],["3",ranking[2],"height:120px;background:#e5e7eb"]].filter(x=>x[1]).map(p=>`<div>${decoratedAvatarHtml(p[1].avatarSeed,p[1].decoId)}<h3 class="safe">${p[1].username}</h3><b>${p[1].score} pts</b><div class="bar" style="${p[2]}">#${p[0]}</div></div>`).join("");
  const shuffled=[...ranking].sort(()=>Math.random()-.5);
- mvpCards.innerHTML=[["Most Funny Drawing 😂",shuffled[0]],["Most Cursed Art 👻",shuffled[1]||shuffled[0]],["Most Confusing 🌀",shuffled[2]||shuffled[0]]].map(m=>`<div class="mvp-card"><h3>${m[0]}</h3><img class="avatar-img" src="${avatarUrl(m[1].avatarSeed)}"><div><b>${m[1].username}</b></div></div>`).join("");
- finalList.innerHTML=ranking.map((p,i)=>`<div class="player-row"><img src="${avatarUrl(p.avatarSeed)}"><b>#${i+1} ${p.username}</b><span style="margin-left:auto;font-weight:1000">${p.score} pts</span></div>`).join("");
+ mvpCards.innerHTML=[["Most Funny Drawing 😂",shuffled[0]],["Most Cursed Art 👻",shuffled[1]||shuffled[0]],["Most Confusing 🌀",shuffled[2]||shuffled[0]]].map(m=>`<div class="mvp-card"><h3>${m[0]}</h3>${decoratedAvatarHtml(m[1].avatarSeed,m[1].decoId)}<div><b>${m[1].username}</b></div></div>`).join("");
+ finalList.innerHTML=ranking.map((p,i)=>`<div class="player-row">${decoratedAvatarHtml(p.avatarSeed,p.decoId)}<b>#${i+1} ${p.username}</b><span style="margin-left:auto;font-weight:1000">${p.score} pts</span></div>`).join("");
+ if(roomState.rewards && roomState.rewards[sessionId]){
+  const r = roomState.rewards[sessionId];
+  const key = `${currentRoomCode}-${roomState.round}-${r.place}-${r.coins}-${r.xp}`;
+  if(rewardNoticeKey !== key){
+    rewardNoticeKey = key;
+    showToast(`Reward: +${r.coins} coins, +${r.xp} XP`);
+    socket.emit("getProfile", { profileId: userProfile?.profileId || profileId });
+  }
+}
  launchConfetti();
 }
 function launchConfetti(){confettiLayer.innerHTML='';const colors=['#fde047','#f9a8d4','#93c5fd','#86efac','#c4b5fd','#fb7185'];for(let i=0;i<42;i++){const s=document.createElement('span');s.className='confetti-piece';s.style.left=Math.random()*100+'%';s.style.top='-40px';s.style.background=colors[i%colors.length];s.style.animationDelay=(Math.random()*1.6)+'s';s.style.animationDuration=(2.2+Math.random()*1.4)+'s';confettiLayer.appendChild(s)}setTimeout(()=>confettiLayer.innerHTML='',4200)}
@@ -421,6 +473,52 @@ function sendChat(inputId){const inp=document.getElementById(inputId);const mess
 function openZoom(name,num,img){playSfx("zoom");currentZoomData=img;zoomTitle.textContent=`${name}'s Drawing #${num}`;zoomImg.src=img;zoomModal.classList.add("active")}
 function closeZoom(){zoomModal.classList.remove("active")}
 function downloadZoomDrawing(){if(!currentZoomData)return;const a=document.createElement("a");a.href=currentZoomData;a.download="drawbattle-drawing.png";a.click();showToast("⬇ Drawing downloaded")}
+
+
+function renderProfilePage(){
+ const p = userProfile || defaultProfile();
+ if(username && !username.value && p.username) username.value = p.username;
+ if(profileName) profileName.textContent = (p.username || "Player") + " ✨";
+ if(profileCoins) profileCoins.textContent = "🪙 " + (p.coins||0) + " coins";
+ if(profileLevel) profileLevel.textContent = "⭐ Lv." + (p.level||1);
+ if(profileWins) profileWins.textContent = p.wins || 0;
+ if(profileXp) profileXp.textContent = p.xp || 0;
+ if(profileOwned) profileOwned.textContent = (p.owned||[]).length;
+ if(shopCoinBadge) shopCoinBadge.textContent = "🪙 " + (p.coins||0) + " coins";
+ const av=findCosmetic(p.avatarId)||COS.avatars[0], de=p.decoId?findCosmetic(p.decoId):null, bn=findCosmetic(p.bannerId);
+ if(profileAvatar) profileAvatar.src = avatarUrl(p.avatarId);
+ if(profileDeco){ if(de){ profileDeco.src=de.url; profileDeco.style.display="block"; } else profileDeco.style.display="none"; }
+ if(profileBanner){ profileBanner.style.background = bannerCss(p.bannerId); profileBanner.style.backgroundSize="cover"; profileBanner.style.backgroundPosition="center"; }
+ if(equippedLine) equippedLine.textContent = `Avatar: ${av?.name||"Free"} • Banner: ${bn?.name||"Plain Pink"} • Decoration: ${de?.name||"None"}`;
+}
+function setShopTab(tab, btn){ shopTab=tab; document.querySelectorAll('.shop-tab').forEach(b=>b.classList.remove('active')); if(btn)btn.classList.add('active'); renderShop(); }
+function renderShop(){
+ const p = userProfile || defaultProfile();
+ if(shopCoinBadge) shopCoinBadge.textContent = "🪙 " + (p.coins||0) + " coins";
+ if(!shopGrid) return;
+ const owned = new Set(p.owned || []);
+ const list = shopTab==='avatars' ? COS.avatars : shopTab==='banners' ? COS.banners : COS.decorations;
+ shopGrid.innerHTML = list.map(it=>{
+  const isOwned = owned.has(it.id);
+  const equipped = p.avatarId===it.id || p.bannerId===it.id || p.decoId===it.id;
+  let preview = '';
+  if(it.kind==='avatar') preview = `<img class="avatar-img shop-avatar" src="${it.url}">`;
+  if(it.kind==='banner') preview = `<div class="shop-banner-preview" style="background:${it.color || `url('${it.url}')`};background-size:cover;background-position:center"></div>`;
+  if(it.kind==='deco') preview = `<div class="shop-deco-preview">${decoratedAvatarHtml(p.avatarId,it.id,'avatar-img shop-avatar')}</div>`;
+  let label = 'Buy';
+  if(isOwned && equipped && it.kind==='deco') label='Unequip';
+  else if(isOwned && equipped) label='Equipped';
+  else if(isOwned) label='Equip';
+  return `<div class="shop-item">${preview}<h3>${it.name}</h3><div class="price-pill">${isOwned?'Owned':'🪙 '+it.price}</div><button onclick="shopAction('${it.id}')">${label}</button></div>`;
+ }).join('');
+}
+function shopAction(itemId){
+ const p = userProfile || defaultProfile();
+ const it = findCosmetic(itemId); if(!it) return;
+ if(p.owned?.includes(itemId) && it.kind==='deco' && p.decoId===itemId){ socket.emit('equipItem', { profileId:p.profileId, itemId }); return; }
+ if(p.owned?.includes(itemId)){ socket.emit('equipItem', { profileId:p.profileId, itemId }); return; }
+ socket.emit('buyItem', { profileId:p.profileId, itemId });
+}
 
 renderAvatars();
 renderColors();

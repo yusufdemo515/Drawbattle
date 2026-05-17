@@ -11,7 +11,7 @@
 <div class="app">
 <header>
   <div class="brand"><div class="logo">🎨</div><div><h1>DrawBattle</h1><div class="tagline">Multiplayer sketch battle</div></div></div>
-  <div class="header-actions"><button onclick="toggleSettings()">⚙ Settings</button><button onclick="toggleAbout()">ℹ About</button></div>
+  <div class="header-actions"><button onclick="go('profile')">👤 Profile</button><button onclick="go('shop')">🛒 Shop</button><button onclick="toggleSettings()">⚙ Settings</button><button onclick="toggleAbout()">ℹ About</button></div>
 </header>
 
 <div id="settingsPanel" class="settings-panel card">
@@ -50,6 +50,49 @@
   <h2>DrawBattle</h2>
   <p class="home-desc">Create a room, invite friends, draw random objects, vote secretly, and climb the scoreboard.</p>
   <button onclick="go('avatar')" class="big-button">▶ Start Game</button>
+ </div>
+
+</section>
+
+<section id="profile" class="screen" style="display:none">
+ <button class="back-btn floating-back" onclick="goBack()">← Back</button>
+ <div class="profile-layout">
+  <div class="card profile-card-main">
+   <div id="profileBanner" class="profile-banner">
+    <div class="profile-avatar-wrap">
+     <img id="profileAvatar" class="avatar-img profile-avatar-img"/>
+     <img id="profileDeco" class="profile-deco-img" style="display:none"/>
+    </div>
+   </div>
+   <div class="profile-info">
+    <div class="row-wrap">
+     <div><h2 id="profileName">Player</h2><div class="small"><b>Notebook Artist</b></div></div>
+     <div><span id="profileCoins" class="pill coin-pill">🪙 0 coins</span> <span id="profileLevel" class="pill level-pill">⭐ Lv.1</span></div>
+    </div>
+    <div class="profile-stats">
+     <div class="setting-box"><small>Wins</small><b id="profileWins">0</b></div>
+     <div class="setting-box"><small>XP</small><b id="profileXp">0</b></div>
+     <div class="setting-box"><small>Owned Items</small><b id="profileOwned">0</b></div>
+    </div>
+    <div class="field"><b>Equipped</b><div id="equippedLine" class="small"></div></div>
+   </div>
+  </div>
+  <div class="card">
+   <h2>Rewards</h2>
+   <div class="field"><b>Normal Match</b><br>1st: 60 coins • 2nd: 35 coins • 3rd: 15 coins • Others: 0</div>
+   <div class="field"><b>Small Match</b><br>1st: 20 coins • 2nd: 10 coins • Others: 0</div>
+   <div class="field"><b>XP</b><br>1st: 120 XP • 2nd: 80 XP • 3rd: 50 XP • Others: 15 XP</div>
+   <button onclick="go('shop')" class="full">Open Shop</button>
+  </div>
+ </div>
+</section>
+
+<section id="shop" class="screen" style="display:none">
+ <button class="back-btn floating-back" onclick="goBack()">← Back</button>
+ <div class="card">
+  <div class="row-wrap"><h2>Shop</h2><div><span id="shopCoinBadge" class="pill coin-pill">🪙 0 coins</span></div></div>
+  <div class="shop-tabs"><button class="shop-tab active" onclick="setShopTab('avatars',this)">Avatars</button><button class="shop-tab" onclick="setShopTab('banners',this)">Banners</button><button class="shop-tab" onclick="setShopTab('decorations',this)">Avatar Decorations</button></div>
+  <div id="shopGrid" class="shop-grid"></div>
  </div>
 </section>
 
@@ -217,6 +260,7 @@
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
+<script src="/cosmetics.js"></script>
 <script src="/client.js"></script>
 </body>
 </html>

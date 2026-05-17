@@ -8,7 +8,7 @@ A complete Node.js + Socket.IO multiplayer drawing battle game.
 - Host settings before starting
 - Reconnect system via saved session ID
 - Real-time chat with bad-word filter
-- Real-time canvas strokes
+- Private drawing canvas: drawings show only after submit
 - Drawing tools: pencil, pen, sketch, marker, eraser, bucket fill
 - Rounds, timers, random prompt reveal animation
 - Voting with hidden votes
@@ -20,6 +20,11 @@ A complete Node.js + Socket.IO multiplayer drawing battle game.
 - Mobile responsive layout
 - Download final drawing from zoom preview
 - Background music loop from `public/assets/drawbattle.mp3`
+- Login/profile system with saved username/avatar/banner/decoration
+- Coins, XP, levels and win stats
+- Shop system: avatars, banners, avatar decorations
+- Buy/equip/unequip logic
+- Match reward system: 1st/2nd/3rd coin rewards and XP progress
 
 ## Run locally
 
@@ -64,9 +69,26 @@ Port:
 3000 or process.env.PORT
 ```
 
+## Profile / Coins Storage
+
+This build saves profiles on the server in:
+
+```text
+data/profiles.json
+```
+
+On Render free, persistent disk is limited, so for long-term public launch you should move profile data to Firebase/Firestore. Firebase setup files are included:
+
+```text
+FIREBASE_SETUP.md
+firebase.json
+firestore.rules
+firestore.indexes.json
+```
+
 ## Notes
 This is a functional multiplayer build, but before public launch you should later add:
-- persistent database
+- Firebase/Firestore production connection
 - stronger moderation/admin dashboard
 - rate limiting
 - production logging
