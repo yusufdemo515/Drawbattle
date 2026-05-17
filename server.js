@@ -112,7 +112,8 @@ function getProfile(profileId, username = "") {
     if (username && isValidUsername(username) && !usernameTakenBy(normalizeUsername(username), profileId)) {
       // Do not fully reserve names automatically from Google display name.
       // Name reservation happens only after the first-time setup screen.
-      profiles[profileId].username = cleanText(username, 24).trim().replace(/\s+/g, " ");
+      const safeName = cleanText(username, 24) || "";
+      profiles[profileId].username = safeName.trim().replace(/\s+/g, " ");
       profiles[profileId].usernameNormalized = normalizeUsername(username);
     }
     saveProfiles();
@@ -126,7 +127,8 @@ function sanitizeProfile(p) {
   if (p.decoId && !ITEM_MAP.has(p.decoId)) p.decoId = "";
   p.matches = Math.max(0, Number(p.matches || 0));
   p.level = Math.max(1, Math.floor((p.xp || 0) / 250) + 1);
-  p.username = cleanText(p.username || "", 24).trim().replace(/\s+/g, " ");
+  const safeProfileName = cleanText(p.username || "", 24) || "";
+  p.username = safeProfileName.trim().replace(/\s+/g, " ");
   p.usernameNormalized = normalizeUsername(p.username);
   p.setupComplete = !!p.setupComplete || (!!p.username && p.username !== "Player" && !!p.usernameSetAt);
   p.usernameSetAt = Number(p.usernameSetAt || (p.setupComplete ? Date.now() : 0));
@@ -205,6 +207,7 @@ function publicRoom(room) {
     players: room.players.length,
     slots: room.settings.slots,
     mode: room.settings.mode,
+    roomMode: room.settings.roomMode || "Classic",
     phase: room.phase
   };
 }

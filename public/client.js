@@ -54,7 +54,7 @@ function lobbyPlayerCardHtml(p, actions=""){
  const level = p.level || 1;
  const role = p.host ? "Host" : "Player";
  const status = p.connected ? "Online" : "Reconnecting";
- return `<div class="player-row player-banner-row clickable-player" onclick="openPublicProfile('${p.sessionId}')" title="View profile" style="background:${banner};background-size:cover;background-position:center">
+ return `<div class="player-row player-banner-row clickable-player" data-session="${p.sessionId}" onclick="openPublicProfile('${p.sessionId}')" title="View profile" style="background:${banner};background-size:cover;background-position:center">
   <div class="player-banner-overlay"></div>
   <div class="player-banner-content">
    ${decoratedAvatarHtml(p.avatarSeed,p.decoId)}
@@ -451,7 +451,7 @@ function updateHostSettings(){
   code: currentRoomCode,
   name: lobbyName.textContent,
   type: roomState.type,
-  settings: { slots: lobbySlots.value, timer: lobbyTimer.value, rounds: lobbyRounds.value, mode: lobbyMode.value }
+  settings: { slots: lobbySlots.value, timer: lobbyTimer.value, rounds: lobbyRounds.value, mode: lobbyMode.value, roomMode: lobbyRoomMode.value }
  });
 }
 function startGame(){ stopSpinSfx(); playSfx("start"); socket.emit("startGame", { code: currentRoomCode }); }
@@ -482,27 +482,41 @@ function joinPublic(code){ joinCode.value = code; joinRoomByCode(); }
 function renderLobby(){
  stopSpinSfx();
  go("lobby", false);
+ const settings = roomState.settings || {};
  lobbyName.textContent = roomState.name;
  roomPrivacy.innerHTML = roomState.type === "Private Room" ? "<b>Private code hidden. Copy invite code only.</b>" : "<b>Public room visible in room list.</b>";
- playerCount.textContent = `${roomState.players.length}/${roomState.settings.slots}`;
- slotInfo.textContent = `${roomState.players.length}/${roomState.settings.slots}`;
- timerInfo.textContent = Math.round(roomState.settings.timer/60)+" min";
- roundInfo.textContent = roomState.settings.rounds;
- modeInfo.textContent = roomState.settings.mode;
- lobbySlots.value = roomState.settings.slots;
- lobbyTimer.value = roomState.settings.timer;
- lobbyRounds.value = roomState.settings.rounds;
- lobbyMode.value = roomState.settings.mode;
+ playerCount.textContent = `${roomState.players.length}/${settings.slots}`;
+ slotInfo.textContent = `${roomState.players.length}/${settings.slots}`;
+ timerInfo.textContent = Math.round((settings.timer || 180)/60)+" min";
+ roundInfo.textContent = settings.rounds || 4;
+ modeInfo.textContent = `${settings.roomMode || "Classic"} • ${settings.mode || "Normal"}`;
+ if(roomModeInfo) roomModeInfo.textContent = settings.roomMode || "Classic";
+ lobbySlots.value = settings.slots;
+ lobbyTimer.value = settings.timer;
+ lobbyRounds.value = settings.rounds;
+ lobbyMode.value = settings.mode || "Normal";
+ if(lobbyRoomMode) lobbyRoomMode.value = settings.roomMode || "Classic";
  document.querySelectorAll(".host-only").forEach(el => el.style.display = isMeHost() ? "" : "none");
  playerList.innerHTML = roomState.players.map(p => {
   const canKick = isMeHost() && p.sessionId !== sessionId;
   const actions = `${canKick?`<button class="report-btn" onclick="kick('${p.sessionId}')">Kick</button>`:""}${p.sessionId !== sessionId?`<button class="report-btn" onclick="reportPlayer('${p.sessionId}')">Report</button>`:""}`;
   return lobbyPlayerCardHtml(p, actions);
  }).join("");
+ if(lobbyEmoteBar){ lobbyEmoteBar.innerHTML = ["😂","🔥","💀","😭","👀"].map(e=>`<button onclick="sendLobbyEmote('${e}')">${e}</button>`).join(""); }
  renderChatList(roomState.chat || []);
 }
 function kick(id){ socket.emit("kick", { code: currentRoomCode, targetSessionId: id }); }
 function reportPlayer(id){ socket.emit("report", { code: currentRoomCode, targetSessionId: id }); showToast("Report sent."); }
+function sendLobbyEmote(e){ if(!currentRoomCode) return; playSfx("reaction"); socket.emit("lobbyEmote", { code: currentRoomCode, emote:e }); }
+function showLobbyEmote(sid, emote){
+ const card=document.querySelector(`.player-row[data-session="${sid}"]`);
+ if(!card) return;
+ const pop=document.createElement("div");
+ pop.className="lobby-emote-pop";
+ pop.textContent=emote;
+ card.appendChild(pop);
+ setTimeout(()=>pop.remove(),1100);
+}
 
 function renderIntro(){
  stopSpinSfx();
@@ -765,10 +779,12 @@ function closePublicProfile(){ if(publicProfileModal) publicProfileModal.classLi
 
 
 function refreshFriends(){ const p=userProfile||defaultProfile(); if(p.profileId) socket.emit("getFriends",{profileId:p.profileId}); }
+function openFriendsModal(){ refreshFriends(); friendsModal.classList.add("active"); }
+function closeFriendsModal(){ friendsModal.classList.remove("active"); }
 function claimDailyReward(){ const p=userProfile||defaultProfile(); socket.emit("claimDaily",{profileId:p.profileId}); }
 function sendFriendRequestUi(){
  const p=userProfile||defaultProfile();
- const u=friendUsernameInput?.value?.trim();
+ const u=(friendUsernameInput?.value || friendUsernameInputModal?.value || "").trim();
  if(!u){showToast("Enter username.");return;}
  socket.emit("sendFriendRequest",{profileId:p.profileId, username:u});
 }
@@ -776,11 +792,14 @@ function acceptFriend(id){ const p=userProfile||defaultProfile(); socket.emit("r
 function declineFriend(id){ const p=userProfile||defaultProfile(); socket.emit("respondFriendRequest",{profileId:p.profileId, fromProfileId:id, accept:false}); }
 function removeFriend(id){ const p=userProfile||defaultProfile(); socket.emit("removeFriend",{profileId:p.profileId, friendProfileId:id}); }
 function renderFriendsPanel(){
- if(!friendsList) return;
+ const target = friendsList || document.getElementById("friendsModalList");
+ if(!target) return;
  const req = (friendsState.requestsIn||[]).map(f=>`<div class="friend-card">${decoratedAvatarHtml(f.avatarId,f.decoId)}<div><b>${f.username}</b><br><small>Lv.${f.level} wants to be friends</small></div><div class="friend-actions"><button onclick="acceptFriend('${f.profileId}')">Accept</button><button class="report-btn" onclick="declineFriend('${f.profileId}')">Decline</button></div></div>`).join("");
  const friends = (friendsState.friends||[]).map(f=>`<div class="friend-card">${decoratedAvatarHtml(f.avatarId,f.decoId)}<div><b>${f.username}</b><br><small>Lv.${f.level} • ${f.wins} wins</small></div><div class="friend-actions"><button onclick="inviteFriend('${f.profileId}')">Invite</button><button onclick="joinFriendPublic('${f.profileId}')">Join</button></div></div>`).join("");
  const out = (friendsState.requestsOut||[]).map(f=>`<span class="pill">Pending: ${f.username}</span>`).join(" ");
- friendsList.innerHTML = `${req?`<h3>Requests</h3>${req}`:""}<h3>Friends</h3>${friends || '<div class="field"><b>No friends yet.</b></div>'}${out?`<h3>Pending</h3>${out}`:""}`;
+ const html = `${req?`<h3>Requests</h3>${req}`:""}<h3>Friends</h3>${friends || '<div class="field"><b>No friends yet.</b></div>'}${out?`<h3>Pending</h3>${out}`:""}`;
+ target.innerHTML = html;
+ if(window.friendsModalList && target !== friendsModalList) friendsModalList.innerHTML = html;
 }
 function inviteFriend(id){ if(!currentRoomCode){showToast("Create/join a room first.");return;} navigator.clipboard?.writeText(`${location.origin} • Room ${currentRoomCode}`); showToast("Invite copied for friend."); }
 function joinFriendPublic(id){ showToast("Friend public-room join works from Public Rooms list for now."); go("rooms"); }

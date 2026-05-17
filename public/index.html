@@ -3,15 +3,15 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>DrawBattle Multiplayer</title>
+<title>DrawBattle — Cozy Multiplayer Drawing Game</title>
 <link rel="stylesheet" href="/style.css"/>
 </head>
 <body>
 <audio id="bgMusic" src="/assets/drawbattle.mp3" loop preload="auto"></audio>
 <div class="app">
 <header>
-  <div class="brand"><div class="logo">🎨</div><div><h1>DrawBattle</h1><div class="tagline">Multiplayer sketch battle</div></div></div>
-  <div class="header-actions"><button onclick="go('profile')">👤 Profile</button><button onclick="go('shop')">🛒 Shop</button><button onclick="toggleSettings()">⚙ Settings</button><button onclick="toggleAbout()">ℹ About</button></div>
+  <div class="brand"><div class="logo">🎨</div><div><h1>DrawBattle</h1><div class="tagline">Cozy multiplayer drawing battles with friends</div></div></div>
+  <div class="header-actions"><button onclick="go('profile')">👤 Profile</button><button onclick="openFriendsModal()">🤝 Friends</button><button onclick="go('shop')">🛒 Shop</button><button onclick="toggleSettings()">⚙ Settings</button><button onclick="toggleAbout()">ℹ About</button></div>
 </header>
 
 <div id="settingsPanel" class="settings-panel card">
@@ -288,6 +288,19 @@
 </div>
 
 <div id="toast" class="toast"></div>
+
+
+<div id="friendsModal" class="modal" onclick="closeFriendsModal()">
+ <div class="modal-card friends-modal-card" onclick="event.stopPropagation()">
+  <button class="close" onclick="closeFriendsModal()">✕</button>
+  <h2>Friends</h2>
+  <div class="field">
+   <b>Add Friend by Username</b><br><br>
+   <div class="friend-search-row"><input id="friendUsernameInputModal" placeholder="Friend username" oninput="if(window.friendUsernameInput) friendUsernameInput.value=this.value"/><button onclick="if(window.friendUsernameInput) friendUsernameInput.value=friendUsernameInputModal.value; sendFriendRequestUi()">Add</button></div>
+  </div>
+  <div id="friendsModalList" class="friends-list"></div>
+ </div>
+</div>
 
 <div id="usernameModal" class="modal" onclick="closeUsernameModal()">
  <div class="modal-card username-modal-card" onclick="event.stopPropagation()">

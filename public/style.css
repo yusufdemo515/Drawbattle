@@ -425,3 +425,51 @@ input[type="range"]::-moz-range-thumb{width:28px;height:28px;border-radius:50%;b
  .mobile-canvas-focus .card{box-shadow:none;border:0;padding:4px;background:transparent}
  .mobile-canvas-focus #drawCanvas{height:72vh!important;min-height:520px}
 }
+
+
+/* Polish hotfix: lobby emotes, friends button/modal, better PC/mobile layout */
+header{max-width:1240px;margin:0 auto 22px;gap:18px}
+.brand h1{letter-spacing:-1px}
+.header-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.header-actions button{min-width:118px}
+.lobby-layout{grid-template-columns:minmax(300px,.78fr) minmax(430px,1.15fr) minmax(300px,.82fr);align-items:start}
+.lobby-layout>.card{height:max-content}
+.stat-grid{grid-template-columns:repeat(auto-fit,minmax(115px,1fr));gap:12px}
+#hostSettings .grid4{grid-template-columns:repeat(auto-fit,minmax(125px,1fr))}
+#lobbyEmoteBar.lobby-emote-bar{display:flex!important;min-height:52px;gap:9px;align-items:center;flex-wrap:wrap;margin:4px 0 18px}
+#lobbyEmoteBar.lobby-emote-bar:empty::before{content:"Loading emotes...";font-weight:900;color:#64748b}
+#lobbyEmoteBar button{display:inline-flex;align-items:center;justify-content:center;width:46px;height:42px;padding:0!important;font-size:23px;background:#fffdf7!important;border-radius:14px!important}
+.lobby-emote-pop{position:absolute;right:18px;top:-20px;font-size:36px;z-index:50;animation:emotePop 1.05s ease forwards;pointer-events:none;filter:drop-shadow(0 4px 3px rgba(0,0,0,.18))}
+@keyframes emotePop{0%{transform:translateY(16px) scale(.45);opacity:0}35%{transform:translateY(-8px) scale(1.18);opacity:1}100%{transform:translateY(-36px) scale(.9);opacity:0}}
+.player-banner-row{position:relative;overflow:visible!important}
+.friends-modal-card{max-width:760px;width:min(94vw,760px)}
+.friends-list{display:flex;flex-direction:column;gap:10px;margin-top:12px}
+.friend-card{display:flex;align-items:center;gap:12px;background:var(--paper2);border:3px solid var(--ink);box-shadow:4px 4px 0 var(--ink);border-radius:18px;padding:12px;position:relative}
+.friend-card .avatar-deco-wrap{width:62px;height:62px;flex:0 0 auto}.friend-card .avatar-img{width:46px;height:46px}.friend-card .avatar-deco{width:64px;height:64px}
+.friend-actions{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+.friend-search-row{display:grid;grid-template-columns:1fr auto;gap:10px}
+.mode-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
+#modeInfo,#roomModeInfo{font-size:16px;word-break:break-word}
+.chat-input-row{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center}
+.chat-body{min-height:160px;max-height:360px;overflow:auto}
+@media(max-width:1100px){
+ .lobby-layout{grid-template-columns:1fr}
+ .header-actions{width:100%;display:grid;grid-template-columns:repeat(2,1fr)}
+ .header-actions button{min-width:0;width:100%}
+}
+@media(max-width:700px){
+ .app{padding:12px}
+ header{align-items:flex-start}
+ .brand{width:100%}
+ .brand h1{font-size:34px}
+ .tagline{font-size:13px}
+ .header-actions{grid-template-columns:repeat(2,1fr);gap:8px}
+ .lobby-layout{gap:14px}
+ .card{border-radius:22px}
+ .stat-grid{grid-template-columns:repeat(2,1fr)}
+ #hostSettings .grid4{grid-template-columns:1fr 1fr}
+ .friend-search-row,.friend-card{grid-template-columns:1fr;display:grid}
+ .friend-actions{margin-left:0;width:100%}
+ .friend-actions button{width:100%}
+ .chat-input-row{grid-template-columns:1fr 54px}
+}
