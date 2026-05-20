@@ -38,6 +38,9 @@ let localTimerId = null;
 let rewardNoticeKey = "";
 const hostRevealedUnsafe = new Set();
 let pendingInitialSetupGoRooms = false;
+let oneColorLocked = "";
+let submittedThisRound = false;
+let lastDrawActivityAt = 0;
 
 const COS = window.COSMETICS || {avatars:[],banners:[],decorations:[],freeAvatarIds:[],freeBannerIds:[]};
 const allCosmetics = () => [...COS.avatars, ...COS.banners, ...COS.decorations];
@@ -166,6 +169,7 @@ socket.on("roomState", state => {
 });
 socket.on("chat", chat => renderChatList(chat));
 socket.on("notice", showToast);
+socket.on("chatTimeout", data => { const msg = data?.message || "You have timeout 10s for spamming."; addLocalSystemChat(msg); showToast("⏳ " + msg); });
 socket.on("errorMsg", msg => showToast("❌ " + msg));
 socket.on("kicked", (data) => {
   showToast(data?.message || "You have been kicked by the host.");
@@ -184,6 +188,7 @@ socket.on("leftRoom", () => {
 });
 
 // Private canvas: no live remote drawing strokes are displayed.
+socket.on("lobbyEmote", ({ sessionId: sid, emote }) => showLobbyEmote(sid, emote));
 socket.on("reaction", ({ targetSessionId, reaction }) => showReaction(targetSessionId, reaction));
 
 function profileReady(){ const p=userProfile || defaultProfile(); return !!(p.setupComplete && p.username); }
@@ -552,6 +557,7 @@ function renderIntro(){
 }
 
 function renderDraw(){
+ submittedThisRound = false;
  stopSpinSfx();
  go("draw", false);
  roundNow.textContent = roomState.round;
@@ -572,6 +578,7 @@ function startLocalTimer(el, done){
   if(currentScreen==="draw" && roomState?.settings?.roomMode==="Blind Draw"){
     document.body.classList.toggle("blind-draw-active", left <= 10000 && left > 0);
   } else document.body.classList.remove("blind-draw-active");
+  if(currentScreen==="draw" && left<=900 && !submittedThisRound){ submitDrawing(true); }
   if(left<=0){clearInterval(localTimerId); document.body.classList.remove("blind-draw-active"); done&&done();}
  };
  tick(); localTimerId=setInterval(tick,500);
@@ -607,21 +614,24 @@ function setupCanvas(){
   clearCanvas(false);
   canvas.onpointerdown=e=>{
    canvas.setPointerCapture && canvas.setPointerCapture(e.pointerId);
+   e.preventDefault();
    const p=pos(e);
    if(tool==='bucket'){playSfx('bucket'); saveState(); floodFill(Math.floor(p.x),Math.floor(p.y),hexToRgba(color)); return;}
-   isDrawing=true; saveState(); redoStack=[]; lastPoint=p; midPoint=p; ctx.beginPath(); ctx.moveTo(p.x,p.y);
+   isDrawing=true; saveState(); redoStack=[]; lastPoint=p; midPoint=p; lastDrawActivityAt=Date.now(); ctx.beginPath(); ctx.moveTo(p.x,p.y);
   };
   canvas.onpointermove=e=>{
    if(!isDrawing || !lastPoint) return;
+   e.preventDefault();
    const p=pos(e); const mid={x:(lastPoint.x+p.x)/2,y:(lastPoint.y+p.y)/2};
    ctx.globalCompositeOperation=tool==="eraser"?"destination-out":"source-over";
    const now=performance.now(); if(now-lastDrawSfx>95){playSfx(tool==="eraser"?"erase":"draw"); lastDrawSfx=now;}
-   ctx.strokeStyle=color; ctx.globalAlpha=tool==="marker"?.55:1;
+   ctx.strokeStyle=color;
    const base=Number(brushSize.value);
-   ctx.lineWidth=tool==="pen"?Math.max(2,base*.55):tool==="sketch"?base*1.15:tool==="marker"?base*1.65:base;
+   ctx.lineWidth=tool==="pen"?Math.max(1.5,base*.45):tool==="sketch"?base*1.25:tool==="marker"?base*1.8:base;
+   ctx.globalAlpha=tool==="sketch"?.72:tool==="marker"?.42:1;
    ctx.beginPath(); ctx.moveTo(midPoint.x,midPoint.y); ctx.quadraticCurveTo(lastPoint.x,lastPoint.y,mid.x,mid.y); ctx.stroke();
    if(tool==="sketch"){ctx.globalAlpha=.16;ctx.beginPath();ctx.moveTo(midPoint.x+Math.random()*3,midPoint.y+Math.random()*3);ctx.quadraticCurveTo(lastPoint.x+Math.random()*5-2.5,lastPoint.y+Math.random()*5-2.5,mid.x,mid.y);ctx.stroke();}
-   ctx.globalAlpha=1; midPoint=mid; lastPoint=p;
+   ctx.globalAlpha=1; midPoint=mid; lastPoint=p; lastDrawActivityAt=Date.now();
    // Private drawing: do not send live strokes to other players.
    // Drawing image is sent only when Submit is clicked.
   };
@@ -634,6 +644,9 @@ function setupCanvas(){
   undoStack=[]; redoStack=[]; clearCanvas(false); saveState();
  }
 }
+if(!window._drawSafetyTicker){
+ window._drawSafetyTicker=setInterval(()=>{ if(isDrawing && Date.now()-lastDrawActivityAt>2500){ isDrawing=false; lastPoint=null; midPoint=null; stopDrawLoop&&stopDrawLoop(); } },1000);
+}
 function drawRemoteStroke(stroke){ /* private canvas mode: disabled */ }
 function pos(e){const r=drawCanvas.getBoundingClientRect();return{x:(e.clientX-r.left)*drawCanvas.width/r.width,y:(e.clientY-r.top)*drawCanvas.height/r.height}}
 function saveState(){try{undoStack.push(drawCanvas.toDataURL());if(undoStack.length>25)undoStack.shift()}catch(e){}}
@@ -641,13 +654,27 @@ function restore(data){const img=new Image();img.onload=()=>{const ctx=drawCanva
 function undo(){if(undoStack.length>1){redoStack.push(undoStack.pop());restore(undoStack[undoStack.length-1])}}
 function redo(){if(redoStack.length){const d=redoStack.pop();undoStack.push(d);restore(d)}}
 function clearCanvas(save=true){playSfx('erase');const ctx=drawCanvas.getContext("2d");ctx.globalCompositeOperation="source-over";ctx.fillStyle="#fff";ctx.fillRect(0,0,drawCanvas.width,drawCanvas.height);if(save)saveState()}
-function setTool(t){ if(roomState?.settings?.roomMode==="No Eraser" && t==="eraser"){showToast("No Eraser Mode enabled.");return;} tool=t;document.querySelectorAll('.tool').forEach(b=>b.classList.remove('tool-selected','active')); if(toolSelect){ if(['pencil','pen','sketch','marker'].includes(t)){toolSelect.value=t;toolSelect.classList.add('selected')} else toolSelect.classList.remove('selected'); } if(t==='eraser') eraserBtn.classList.add('tool-selected'); if(t==='bucket') bucketBtn.classList.add('tool-selected');}
+function setTool(t){
+ if(roomState?.settings?.roomMode==="No Eraser" && t==="eraser"){showToast("No Eraser Mode enabled.");return;}
+ tool=t;
+ document.querySelectorAll('.tool').forEach(b=>b.classList.remove('tool-selected','active'));
+ const map={pencil:window.toolPencil,pen:window.toolPen,sketch:window.toolSketch,marker:window.toolMarker,eraser:window.eraserBtn,bucket:window.bucketBtn};
+ if(map[t]) map[t].classList.add('tool-selected');
+}
 function renderColors(){
  let cs=["#111827","#ef4444","#f97316","#eab308","#22c55e","#06b6d4","#3b82f6","#8b5cf6","#ec4899","#ffffff","#78350f","#94a3b8"];
  if(roomState?.settings?.roomMode==="One Color" && oneColorLocked) cs=[oneColorLocked];
  colors.innerHTML=cs.map(c=>`<span class="color ${c===color?'active':''}" style="background:${c}" onclick="${roomState?.settings?.roomMode==='One Color'?'showToast(\'One Color Mode locked.\')':`color='${c}';renderColors()`}"></span>`).join("");
 }
-function submitDrawing(){ playSfx("submit"); socket.emit("submitDrawing", { code: currentRoomCode, image: drawCanvas.toDataURL("image/png") }); showToast("Drawing submitted."); }
+function submitDrawing(auto=false){
+ if(submittedThisRound) return;
+ submittedThisRound = true;
+ try{ playSfx("submit"); }catch(e){}
+ let image = null;
+ try{ image = drawCanvas.toDataURL("image/jpeg", 0.82); }catch(e){}
+ socket.emit("submitDrawing", { code: currentRoomCode, image });
+ showToast(auto ? "Time up — drawing auto-submitted." : "Drawing submitted.");
+}
 
 function hexToRgba(hex){hex=hex.replace("#","");if(hex.length===3)hex=hex.split("").map(c=>c+c).join("");return[parseInt(hex.slice(0,2),16),parseInt(hex.slice(2,4),16),parseInt(hex.slice(4,6),16),255]}
 function floodFill(startX,startY,fill){
@@ -678,7 +705,7 @@ function renderVoteCards(){
   const blurClass = isUnsafe && !hostCanSee ? " unsafe-blurred" : "";
   const showBtn = isUnsafe && host ? `<button class="zoom-btn show-unsafe-btn" onclick="toggleUnsafeReveal('${d.sessionId}')">${hostCanSee?'Hide':'Show me'}</button>` : "";
   const reportBtn = host && d.sessionId!==sessionId ? `<button class="reaction-btn" onclick="reportUnsafeDrawing('${d.sessionId}')">🚩 Report image</button>` : "";
-  const accuracy = d.accuracyScore ? `<small class="accuracy-chip">Detector +${d.accuracyScore} pts</small>` : "";
+  const accuracy = "";
   return `<div class="vote-card" data-session="${d.sessionId}"><div class="drawing-preview${blurClass}"><button class="zoom-btn" onclick="openZoom('${d.username}',${start+i+1},'${img}')">🔍 Zoom</button>${showBtn}<img src="${img}">${isUnsafe && !hostCanSee?`<div class="unsafe-cover"><b>Blurred safety image</b><small>Adult/illegal report</small></div>`:""}</div><div class="player-row" style="box-shadow:none;border:0">${decoratedAvatarHtml(d.avatarSeed,d.decoId)}<div><b>${d.username}</b><br><small>${d.afk?'AFK auto-skip':'Votes hidden'}</small><br>${accuracy}</div></div><div class="reaction-row">${reactions.map(r=>`<button class="reaction-btn" onclick="sendReaction(this,'${d.sessionId}','${r.replace(/'/g,"")}')">${r}</button>`).join("")}${reportBtn}</div><button style="width:100%;margin-top:10px" ${d.sessionId===sessionId?'disabled':''} onclick="castVote('${d.sessionId}',this)">${votedFor===d.sessionId?'VOTED':'VOTE'}</button></div>`;
  }).join("");
  voteDots.innerHTML=Array.from({length:pages}).map((_,i)=>`<span class="dot-page ${i===votePage?'active':''}"></span>`).join("");
@@ -730,8 +757,12 @@ function renderResults(){
 function launchConfetti(){confettiLayer.innerHTML='';const colors=['#fde047','#f9a8d4','#93c5fd','#86efac','#c4b5fd','#fb7185'];for(let i=0;i<42;i++){const s=document.createElement('span');s.className='confetti-piece';s.style.left=Math.random()*100+'%';s.style.top='-40px';s.style.background=colors[i%colors.length];s.style.animationDelay=(Math.random()*1.6)+'s';s.style.animationDuration=(2.2+Math.random()*1.4)+'s';confettiLayer.appendChild(s)}setTimeout(()=>confettiLayer.innerHTML='',4200)}
 
 function renderChatList(chat=[]){
- const html=chat.map(m=>`<div class="chat-msg"><img class="chat-avatar" src="${avatarUrl(m.avatarSeed)}"><div><b>${m.username}</b><p>${m.message}</p></div></div>`).join("");
+ const html=chat.map(m=>`<div class="chat-msg ${m.emote?'emote-chat':''}"><img class="chat-avatar" src="${avatarUrl(m.avatarSeed)}"><div><b>${m.username}</b><p>${m.message}</p></div></div>`).join("");
  [lobbyChat, sketchChat, voteChat].forEach(box=>{ if(box){ box.innerHTML=html; box.scrollTop=box.scrollHeight; }});
+}
+function addLocalSystemChat(message){
+ const html = `<div class="chat-msg system-chat"><div><b>System</b><p>${String(message).replace(/[<>]/g,"")}</p></div></div>`;
+ [lobbyChat, sketchChat, voteChat].forEach(box=>{ if(box){ box.insertAdjacentHTML("beforeend", html); box.scrollTop=box.scrollHeight; }});
 }
 function playTypeSfx(){const now=performance.now();if(!window._lastTypeSfx||now-window._lastTypeSfx>120){playSfx("type");window._lastTypeSfx=now}}
 document.addEventListener("input", e=>{ if(["lobbyMsg","drawMsg","voteMsg"].includes(e.target.id)) playTypeSfx(); });
@@ -778,32 +809,6 @@ function openPublicProfile(targetSessionId){
 function closePublicProfile(){ if(publicProfileModal) publicProfileModal.classList.remove("active"); }
 
 
-function refreshFriends(){ const p=userProfile||defaultProfile(); if(p.profileId) socket.emit("getFriends",{profileId:p.profileId}); }
-function openFriendsModal(){ refreshFriends(); friendsModal.classList.add("active"); }
-function closeFriendsModal(){ friendsModal.classList.remove("active"); }
-function claimDailyReward(){ const p=userProfile||defaultProfile(); socket.emit("claimDaily",{profileId:p.profileId}); }
-function sendFriendRequestUi(){
- const p=userProfile||defaultProfile();
- const u=(friendUsernameInput?.value || friendUsernameInputModal?.value || "").trim();
- if(!u){showToast("Enter username.");return;}
- socket.emit("sendFriendRequest",{profileId:p.profileId, username:u});
-}
-function acceptFriend(id){ const p=userProfile||defaultProfile(); socket.emit("respondFriendRequest",{profileId:p.profileId, fromProfileId:id, accept:true}); }
-function declineFriend(id){ const p=userProfile||defaultProfile(); socket.emit("respondFriendRequest",{profileId:p.profileId, fromProfileId:id, accept:false}); }
-function removeFriend(id){ const p=userProfile||defaultProfile(); socket.emit("removeFriend",{profileId:p.profileId, friendProfileId:id}); }
-function renderFriendsPanel(){
- const target = friendsList || document.getElementById("friendsModalList");
- if(!target) return;
- const req = (friendsState.requestsIn||[]).map(f=>`<div class="friend-card">${decoratedAvatarHtml(f.avatarId,f.decoId)}<div><b>${f.username}</b><br><small>Lv.${f.level} wants to be friends</small></div><div class="friend-actions"><button onclick="acceptFriend('${f.profileId}')">Accept</button><button class="report-btn" onclick="declineFriend('${f.profileId}')">Decline</button></div></div>`).join("");
- const friends = (friendsState.friends||[]).map(f=>`<div class="friend-card">${decoratedAvatarHtml(f.avatarId,f.decoId)}<div><b>${f.username}</b><br><small>Lv.${f.level} • ${f.wins} wins</small></div><div class="friend-actions"><button onclick="inviteFriend('${f.profileId}')">Invite</button><button onclick="joinFriendPublic('${f.profileId}')">Join</button></div></div>`).join("");
- const out = (friendsState.requestsOut||[]).map(f=>`<span class="pill">Pending: ${f.username}</span>`).join(" ");
- const html = `${req?`<h3>Requests</h3>${req}`:""}<h3>Friends</h3>${friends || '<div class="field"><b>No friends yet.</b></div>'}${out?`<h3>Pending</h3>${out}`:""}`;
- target.innerHTML = html;
- if(window.friendsModalList && target !== friendsModalList) friendsModalList.innerHTML = html;
-}
-function inviteFriend(id){ if(!currentRoomCode){showToast("Create/join a room first.");return;} navigator.clipboard?.writeText(`${location.origin} • Room ${currentRoomCode}`); showToast("Invite copied for friend."); }
-function joinFriendPublic(id){ showToast("Friend public-room join works from Public Rooms list for now."); go("rooms"); }
-
 function renderProfilePage(){
  const p = userProfile || defaultProfile();
  if(username && !username.value && p.username) username.value = p.username;
@@ -831,7 +836,6 @@ function renderProfilePage(){
   profileUsernameBtn.disabled = !p.setupComplete || usernameChangeLeftDays(p) > 0;
   profileUsernameBtn.textContent = usernameChangeLeftDays(p) > 0 ? "Locked" : "Change Username";
  }
- if(currentScreen === "profile") refreshFriends();
 }
 function usernameChangeLeftDays(p){
  const last = Number(p?.lastUsernameChangeAt || 0);

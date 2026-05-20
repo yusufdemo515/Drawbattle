@@ -385,9 +385,9 @@ function serializeRoom(room) {
     totalRounds: room.settings.rounds,
     currentPrompt: room.phase === "draw" ? room.currentPrompt : "",
     timerEndsAt: room.timerEndsAt,
-    chat: room.chat.slice(-50),
+    chat: room.chat.slice(-200),
     drawings: room.phase === "vote" || room.phase === "roundResults" || room.phase === "results"
-      ? [...room.drawings.values()].map(d => ({ sessionId: d.sessionId, username: d.username, avatarSeed: d.avatarSeed, decoId: d.decoId || "", image: d.image, afk: d.afk || false, unsafe: !!d.unsafe, unsafeReports: d.unsafeReports || 0, moderationReason: d.moderationReason || "", accuracyScore: d.accuracyScore || 0 }))
+      ? [...room.drawings.values()].map(d => ({ sessionId: d.sessionId, username: d.username, avatarSeed: d.avatarSeed, decoId: d.decoId || "", image: d.image, afk: d.afk || false, unsafe: !!d.unsafe, unsafeReports: d.unsafeReports || 0, moderationReason: d.moderationReason || "" }))
       : [],
     reactionCounts: room.reactionCounts,
     rewards: room.rewards || {}
@@ -396,8 +396,38 @@ function serializeRoom(room) {
 
 function addChat(room, msg) {
   room.chat.push(msg);
-  if (room.chat.length > 60) room.chat.shift();
-  io.to(room.code).emit("chat", room.chat.slice(-50));
+  if (room.chat.length > 300) room.chat.splice(0, room.chat.length - 300);
+  io.to(room.code).emit("chat", room.chat.slice(-200));
+}
+
+function connectedPlayers(room) {
+  return room.players.filter(p => p.connected !== false);
+}
+
+function pauseActiveRoomIfTooFew(room, reason = "Not enough players. Game returned to lobby.") {
+  if (!room) return false;
+  if (["intro", "draw", "vote", "roundResults"].includes(room.phase) && connectedPlayers(room).length < 2) {
+    endTimer(room);
+    room.phase = "lobby";
+    room.timerEndsAt = null;
+    room.drawings.clear();
+    room.votes.clear();
+    addChat(room, { username: "System", avatarSeed: "Robot", message: reason, time: Date.now() });
+    broadcastRoom(room);
+    return true;
+  }
+  return false;
+}
+
+function transferHostIfNeeded(room, oldHostId) {
+  if (!room || room.players.length === 0) return;
+  if (room.hostSessionId && room.players.some(p => p.sessionId === room.hostSessionId)) return;
+  const nextHost = connectedPlayers(room)[0] || room.players[0];
+  if (!nextHost) return;
+  room.hostSessionId = nextHost.sessionId;
+  addChat(room, { username: "System", avatarSeed: "Robot", message: "Host left the room.", time: Date.now() });
+  const sess = sessions.get(nextHost.sessionId);
+  if (sess?.socketId) io.to(sess.socketId).emit("notice", "You are the host now.");
 }
 
 function endTimer(room) {
@@ -427,8 +457,9 @@ function startRound(room) {
 
 function startVoting(room) {
   endTimer(room);
-  // AFK auto-submit blank drawing for missing players
-  for (const p of room.players) {
+  if (pauseActiveRoomIfTooFew(room, "A player left. Waiting in lobby for 2 players.")) return;
+  // Auto-submit blank drawing for missing active players to avoid stuck rounds
+  for (const p of connectedPlayers(room)) {
     if (!room.drawings.has(p.sessionId)) {
       room.drawings.set(p.sessionId, {
         sessionId: p.sessionId,
@@ -452,6 +483,7 @@ function startVoting(room) {
 
 function finishVoting(room) {
   endTimer(room);
+  if (pauseActiveRoomIfTooFew(room, "A player left. Voting stopped and room returned to lobby.")) return;
   const totals = {};
   for (const votedId of room.votes.values()) totals[votedId] = (totals[votedId] || 0) + 1;
   // no votes fallback
@@ -479,11 +511,6 @@ function finishVoting(room) {
     p.score += votes * 100 + bonus;
   });
 
-  // Drawing effort / detector hook bonus. Real semantic AI can replace estimateDrawingAccuracy later.
-  for (const drawing of room.drawings.values()) {
-    const p = room.players.find(x => x.sessionId === drawing.sessionId);
-    if (p && drawing.accuracyScore) p.score += drawing.accuracyScore;
-  }
   room.phase = "roundResults";
   room.timerEndsAt = Date.now() + 4000;
   broadcastRoom(room);
@@ -688,7 +715,7 @@ io.on("connection", (socket) => {
     const room = rooms.get(code);
     if (!room) return socket.emit("errorMsg", "Room not found.");
     if (room.players.length >= room.settings.slots) return socket.emit("errorMsg", "Room is full.");
-    if (room.phase !== "lobby") return socket.emit("errorMsg", "Game already started.");
+    // Rejoin / mid-round join is allowed. Player can continue in current phase or wait next round.
     const sessionId = socket.data.sessionId || nanoid(16);
     socket.data.sessionId = sessionId;
     let player = room.players.find(p => p.sessionId === sessionId);
@@ -779,7 +806,7 @@ io.on("connection", (socket) => {
       accuracyScore: estimateDrawingAccuracy(safeImage)
     });
     broadcastRoom(room);
-    if (room.drawings.size >= room.players.length) startVoting(room);
+    if (room.drawings.size >= connectedPlayers(room).length) startVoting(room);
   });
 
   socket.on("vote", ({ code, targetSessionId }) => {
@@ -792,7 +819,7 @@ io.on("connection", (socket) => {
     socket.emit("notice", "Vote saved.");
 
     // Auto-finish voting when all connected eligible players have voted.
-    const connectedEligible = room.players.filter(p => p.connected);
+    const connectedEligible = connectedPlayers(room);
     const neededVotes = connectedEligible.filter(p => room.players.some(t => t.sessionId !== p.sessionId)).length;
     if (neededVotes > 0 && room.votes.size >= neededVotes) {
       finishVoting(room);
@@ -839,55 +866,19 @@ io.on("connection", (socket) => {
     socket.emit("notice", `Daily reward claimed: +${coins} coins, +${xp} XP`);
   });
 
-  socket.on("getFriends", ({ profileId }) => {
-    const profile = sanitizeProfile(getProfile(profileId));
-    emitFriends(socket, profile);
-  });
-
-  socket.on("sendFriendRequest", ({ profileId, username }) => {
-    const from = sanitizeProfile(getProfile(profileId));
-    const to = findProfileByUsername(username);
-    if (!to) return socket.emit("shopError", "User not found.");
-    if (to.profileId === from.profileId) return socket.emit("shopError", "You cannot add yourself.");
-    if (from.friends.includes(to.profileId)) return socket.emit("shopError", "Already friends.");
-    if (!from.friendRequestsOut.includes(to.profileId)) from.friendRequestsOut.push(to.profileId);
-    if (!to.friendRequestsIn.includes(from.profileId)) to.friendRequestsIn.push(from.profileId);
-    saveProfiles();
-    emitFriends(socket, from);
-    socket.emit("notice", "Friend request sent.");
-  });
-
-  socket.on("respondFriendRequest", ({ profileId, fromProfileId, accept }) => {
-    const me = sanitizeProfile(getProfile(profileId));
-    const other = profiles[fromProfileId] ? sanitizeProfile(profiles[fromProfileId]) : null;
-    if (!other) return socket.emit("shopError", "Request user not found.");
-    me.friendRequestsIn = me.friendRequestsIn.filter(id => id !== other.profileId);
-    other.friendRequestsOut = other.friendRequestsOut.filter(id => id !== me.profileId);
-    if (accept) {
-      if (!me.friends.includes(other.profileId)) me.friends.push(other.profileId);
-      if (!other.friends.includes(me.profileId)) other.friends.push(me.profileId);
-    }
-    saveProfiles();
-    emitFriends(socket, me);
-    socket.emit("notice", accept ? "Friend added." : "Friend request declined.");
-  });
-
-  socket.on("removeFriend", ({ profileId, friendProfileId }) => {
-    const me = sanitizeProfile(getProfile(profileId));
-    const other = profiles[friendProfileId] ? sanitizeProfile(profiles[friendProfileId]) : null;
-    me.friends = me.friends.filter(id => id !== friendProfileId);
-    if (other) other.friends = other.friends.filter(id => id !== me.profileId);
-    saveProfiles();
-    emitFriends(socket, me);
-    socket.emit("notice", "Friend removed.");
-  });
+  socket.on("getFriends", () => socket.emit("friendsData", { friends: [], requestsIn: [], requestsOut: [] }));
+  socket.on("sendFriendRequest", () => socket.emit("shopError", "Friends feature is disabled."));
+  socket.on("respondFriendRequest", () => socket.emit("shopError", "Friends feature is disabled."));
+  socket.on("removeFriend", () => socket.emit("shopError", "Friends feature is disabled."));
 
   socket.on("lobbyEmote", ({ code, emote }) => {
     const room = rooms.get(code);
     if (!room || !room.players.some(p => p.sessionId === socket.data.sessionId)) return;
     emote = cleanText(emote, 4);
     if (!["😂","🔥","💀","😭","👀"].includes(emote)) return;
+    const player = room.players.find(p => p.sessionId === socket.data.sessionId);
     io.to(room.code).emit("lobbyEmote", { sessionId: socket.data.sessionId, emote });
+    if (player) addChat(room, { username: player.username, avatarSeed: player.avatarSeed, message: emote, time: Date.now(), emote: true });
   });
 
 
@@ -904,12 +895,28 @@ io.on("connection", (socket) => {
   socket.on("chat", ({ code, message }) => {
     const room = rooms.get(code);
     if (!room) return;
-    message = cleanText(message, 140);
+    message = cleanText(message, 180);
     if (!message) return socket.emit("errorMsg", "Bad/empty chat blocked.");
     const player = room.players.find(p => p.sessionId === socket.data.sessionId);
     if (!player) return;
-    player.lastActive = Date.now();
-    addChat(room, { username: player.username, avatarSeed: player.avatarSeed, message, time: Date.now() });
+    const now = Date.now();
+    const norm = String(message).trim().toLowerCase();
+    player.chatSpam = player.chatSpam || { last: "", count: 0, timeoutUntil: 0 };
+    if (player.chatSpam.timeoutUntil && now < player.chatSpam.timeoutUntil) {
+      const left = Math.ceil((player.chatSpam.timeoutUntil - now) / 1000);
+      return socket.emit("chatTimeout", { seconds: left, message: `You have timeout ${left}s for spamming.` });
+    }
+    if (player.chatSpam.last === norm && now - (player.chatSpam.lastAt || 0) < 12000) player.chatSpam.count += 1;
+    else player.chatSpam.count = 1;
+    player.chatSpam.last = norm;
+    player.chatSpam.lastAt = now;
+    if (player.chatSpam.count >= 4) {
+      player.chatSpam.timeoutUntil = now + 10000;
+      player.chatSpam.count = 0;
+      return socket.emit("chatTimeout", { seconds: 10, message: "You have timeout 10s for spamming." });
+    }
+    player.lastActive = now;
+    addChat(room, { username: player.username, avatarSeed: player.avatarSeed, message, time: now });
   });
 
   socket.on("kick", ({ code, targetSessionId }) => {
@@ -963,7 +970,12 @@ io.on("connection", (socket) => {
     const idx = room.players.findIndex(p => p.sessionId === sessionId);
     if (idx >= 0) {
       const wasHost = room.hostSessionId === sessionId;
-      room.players.splice(idx, 1);
+      const [leftPlayer] = room.players.splice(idx, 1);
+      room.drawings.delete(sessionId);
+      room.votes.delete(sessionId);
+      for (const [voter, target] of [...room.votes.entries()]) {
+        if (target === sessionId) room.votes.delete(voter);
+      }
       socket.leave(room.code);
       const s = sessions.get(sessionId);
       if (s) s.roomCode = null;
@@ -976,18 +988,9 @@ io.on("connection", (socket) => {
         return;
       }
 
-      if (wasHost) {
-        // Host left: next connected player becomes host automatically.
-        const nextHost = room.players.find(p => p.connected) || room.players[0];
-        room.hostSessionId = nextHost.sessionId;
-        addChat(room, {
-          username: "System",
-          avatarSeed: "Robot",
-          message: `${nextHost.username} is the new host.`,
-          time: Date.now()
-        });
-      }
-
+      if (wasHost) transferHostIfNeeded(room, sessionId);
+      addChat(room, { username: "System", avatarSeed: "Robot", message: `${leftPlayer?.username || "A player"} left the room.`, time: Date.now() });
+      pauseActiveRoomIfTooFew(room, "A player left. Waiting in lobby for 2 players.");
       socket.emit("leftRoom");
       broadcastRoom(room);
     }
@@ -999,19 +1002,28 @@ io.on("connection", (socket) => {
     const s = sessions.get(sessionId);
     const room = s?.roomCode ? rooms.get(s.roomCode) : null;
     if (room) {
-      const p = room.players.find(x => x.sessionId === sessionId);
-      if (p) p.connected = false;
-      broadcastRoom(room);
-      // cleanup disconnected empty rooms after 10 min
-      setTimeout(() => {
-        const r = rooms.get(room.code);
-        if (r && r.players.every(x => !x.connected)) {
-          endTimer(r);
+      const idx = room.players.findIndex(x => x.sessionId === sessionId);
+      if (idx >= 0) {
+        const wasHost = room.hostSessionId === sessionId;
+        const [leftPlayer] = room.players.splice(idx, 1);
+        room.drawings.delete(sessionId);
+        room.votes.delete(sessionId);
+        for (const [voter, target] of [...room.votes.entries()]) {
+          if (target === sessionId) room.votes.delete(voter);
+        }
+        if (!room.players.length) {
+          endTimer(room);
           rooms.delete(room.code);
           io.emit("publicRooms", getRoomList());
+        } else {
+          if (wasHost) transferHostIfNeeded(room, sessionId);
+          addChat(room, { username: "System", avatarSeed: "Robot", message: `${leftPlayer?.username || "A player"} disconnected.`, time: Date.now() });
+          pauseActiveRoomIfTooFew(room, "A player disconnected. Waiting in lobby for 2 players.");
+          broadcastRoom(room);
         }
-      }, 10 * 60 * 1000);
+      }
     }
+    if (s) s.roomCode = null;
   });
 });
 

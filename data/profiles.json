@@ -1,0 +1,72 @@
+{
+  "P_A": {
+    "profileId": "P_A",
+    "username": "Alpha",
+    "usernameNormalized": "alpha",
+    "setupComplete": true,
+    "usernameSetAt": 1779247776247,
+    "lastUsernameChangeAt": 1779247776247,
+    "coins": 0,
+    "xp": 0,
+    "level": 1,
+    "wins": 0,
+    "matches": 0,
+    "daily": {
+      "lastClaim": 0,
+      "streak": 0
+    },
+    "badges": [],
+    "friends": [],
+    "friendRequestsIn": [],
+    "friendRequestsOut": [],
+    "owned": [
+      "free_purple_glasses",
+      "free_mint_beanie",
+      "free_orange_hoodie",
+      "free_scarf_boy",
+      "free_headphone_boy",
+      "free_green_sweater",
+      "banner_free_pink",
+      "banner_free_sky",
+      "banner_free_red"
+    ],
+    "avatarId": "free_purple_glasses",
+    "bannerId": "banner_free_pink",
+    "decoId": ""
+  },
+  "P_B": {
+    "profileId": "P_B",
+    "username": "Beta",
+    "usernameNormalized": "beta",
+    "setupComplete": true,
+    "usernameSetAt": 1779247776248,
+    "lastUsernameChangeAt": 1779247776248,
+    "coins": 0,
+    "xp": 0,
+    "level": 1,
+    "wins": 0,
+    "matches": 0,
+    "daily": {
+      "lastClaim": 0,
+      "streak": 0
+    },
+    "badges": [],
+    "friends": [],
+    "friendRequestsIn": [],
+    "friendRequestsOut": [],
+    "owned": [
+      "free_purple_glasses",
+      "free_mint_beanie",
+      "free_orange_hoodie",
+      "free_scarf_boy",
+      "free_headphone_boy",
+      "free_green_sweater",
+      "banner_free_pink",
+      "banner_free_sky",
+      "banner_free_red"
+    ],
+    "avatarId": "free_mint_beanie",
+    "bannerId": "banner_free_pink",
+    "decoId": ""
+  }
+}

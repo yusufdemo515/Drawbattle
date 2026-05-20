@@ -10,8 +10,8 @@
 <audio id="bgMusic" src="/assets/drawbattle.mp3" loop preload="auto"></audio>
 <div class="app">
 <header>
-  <div class="brand"><div class="logo">🎨</div><div><h1>DrawBattle</h1><div class="tagline">Cozy multiplayer drawing battles with friends</div></div></div>
-  <div class="header-actions"><button onclick="go('profile')">👤 Profile</button><button onclick="openFriendsModal()">🤝 Friends</button><button onclick="go('shop')">🛒 Shop</button><button onclick="toggleSettings()">⚙ Settings</button><button onclick="toggleAbout()">ℹ About</button></div>
+  <div class="brand"><div class="logo">🎨</div><div><h1>DrawBattle</h1><div class="tagline">Cozy multiplayer drawing battles</div></div></div>
+  <div class="header-actions"><button onclick="go('profile')">👤 Profile</button><button onclick="go('shop')">🛒 Shop</button><button onclick="toggleSettings()">⚙ Settings</button><button onclick="toggleAbout()">ℹ About</button></div>
 </header>
 
 <div id="settingsPanel" class="settings-panel card">
@@ -53,7 +53,7 @@
   <span class="pill">✨ Online Drawing Battle</span> <span class="safety-badge">🛡 Safe Chat</span>
   <div class="credits-line">Dev: <b>Yusuf</b> • Studio: <b>BuddhuStudio</b> • Version: <b>v1.0.0</b></div>
   <h2>DrawBattle</h2>
-  <p class="home-desc">Create a room, invite friends, draw random objects, vote secretly, and climb the scoreboard.</p>
+  <p class="home-desc">Create a room, draw random objects, vote secretly, and climb the scoreboard.</p>
   <button onclick="startGameFlow()" class="big-button">▶ Start Game</button>
  </div>
 
@@ -106,13 +106,6 @@
    <div class="field"><b>Small Match</b><br>1st: 20 coins • 2nd: 10 coins • Others: 0</div>
    <div class="field"><b>XP</b><br>1st: 120 XP • 2nd: 80 XP • 3rd: 50 XP • Others: 15 XP</div>
    <button onclick="go('shop')" class="full">Open Shop</button>
-   <hr>
-   <h2>Friends</h2>
-   <div class="field">
-    <b>Add Friend by Username</b><br><br>
-    <div class="friend-search-row"><input id="friendUsernameInput" placeholder="Friend username"/><button onclick="sendFriendRequestUi()">Add</button></div>
-   </div>
-   <div id="friendsList" class="friends-list"></div>
   </div>
  </div>
 </section>
@@ -232,12 +225,12 @@
     <div class="toolbox">
      <b>🎨 Tools</b>
      <label class="tool-label"><b>Brush Style</b></label>
-     <select id="toolSelect" class="tool-select selected" onchange="setTool(this.value)">
-       <option value="pencil">✏️ Pencil</option>
-       <option value="pen">🖊️ Pen</option>
-       <option value="sketch">🖍️ Sketch</option>
-       <option value="marker">🖌️ Marker</option>
-     </select>
+     <div class="brush-style-grid">
+       <button id="toolPencil" class="tool style-tool tool-selected" onclick="setTool('pencil')" title="Pencil">✏️</button>
+       <button id="toolPen" class="tool style-tool" onclick="setTool('pen')" title="Pen">🖊️</button>
+       <button id="toolSketch" class="tool style-tool" onclick="setTool('sketch')" title="Sketch">🖍️</button>
+       <button id="toolMarker" class="tool style-tool" onclick="setTool('marker')" title="Marker">🖌️</button>
+     </div>
      <button id="eraserBtn" class="tool" onclick="setTool('eraser')">🧽 Eraser</button>
      <button id="bucketBtn" class="tool" onclick="setTool('bucket')">🪣 Bucket Fill</button>
      <label><b>Size</b></label><input id="brushSize" type="range" min="2" max="40" value="12"/>
@@ -289,18 +282,6 @@
 
 <div id="toast" class="toast"></div>
 
-
-<div id="friendsModal" class="modal" onclick="closeFriendsModal()">
- <div class="modal-card friends-modal-card" onclick="event.stopPropagation()">
-  <button class="close" onclick="closeFriendsModal()">✕</button>
-  <h2>Friends</h2>
-  <div class="field">
-   <b>Add Friend by Username</b><br><br>
-   <div class="friend-search-row"><input id="friendUsernameInputModal" placeholder="Friend username" oninput="if(window.friendUsernameInput) friendUsernameInput.value=this.value"/><button onclick="if(window.friendUsernameInput) friendUsernameInput.value=friendUsernameInputModal.value; sendFriendRequestUi()">Add</button></div>
-  </div>
-  <div id="friendsModalList" class="friends-list"></div>
- </div>
-</div>
 
 <div id="usernameModal" class="modal" onclick="closeUsernameModal()">
  <div class="modal-card username-modal-card" onclick="event.stopPropagation()">

@@ -486,3 +486,13 @@ header{max-width:1240px;margin:0 auto 22px;gap:18px}
 .lobby-emote-bar{display:flex!important;gap:9px!important;min-height:50px!important;align-items:center!important}
 .lobby-emote-bar button{display:inline-flex!important;align-items:center!important;justify-content:center!important;width:46px!important;height:42px!important;padding:0!important;font-size:22px!important}
 @media(max-width:700px){.player-banner-content{grid-template-columns:auto 1fr auto!important}.player-actions{grid-column:2/5;justify-content:flex-start!important;margin-top:8px}.player-meta small{max-width:220px}.player-name-line b{max-width:180px}}
+
+/* v20 serious stability fixes */
+.header-actions button[onclick*="openFriendsModal"], #friendsModal, #friendsList, .friends-list, .friend-card{display:none!important}
+.lobby-emote-bar{display:flex!important;gap:10px;flex-wrap:wrap;min-height:48px;margin-bottom:12px}
+.lobby-emote-bar button{font-size:24px;min-width:46px;height:42px;padding:0!important;background:#fffdf7!important}
+.emote-chat p{font-size:24px;line-height:1;margin:2px 0}.system-chat{background:#fff7dc;border:2px solid var(--ink);border-radius:14px;padding:8px}
+.player-banner-row{min-height:96px;overflow:visible!important}.player-banner-content{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;gap:12px;width:100%}.player-meta{min-width:0}.player-name-line{display:flex;align-items:center;gap:8px;min-width:0}.player-name-line b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}.player-actions{display:flex;gap:6px;flex-wrap:nowrap}.player-actions .report-btn{padding:8px 12px!important}
+.brush-style-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:8px 0 10px}.style-tool{font-size:21px!important;padding:10px!important;min-width:0}.tool-selected{background:var(--accent)!important;transform:rotate(-2deg)}
+.canvas-wrap,#drawCanvas{touch-action:none!important;overscroll-behavior:contain}.accuracy-chip{display:none!important}.chat-body{max-height:460px}.chat-msg p{word-break:break-word}
+@media(max-width:700px){.player-banner-content{grid-template-columns:auto minmax(0,1fr) auto}.player-actions{grid-column:2/4}.brush-style-grid{grid-template-columns:repeat(4,48px);justify-content:start}.style-tool{width:44px;height:40px}.chat-body{max-height:320px}}
